@@ -20,12 +20,9 @@ For logging to your WandB account, use:
 --wandb-run-name=[optional: WandB run name (within the defined project)]`
 
 """
-
-from pettingzoo.sisl import waterworld_v4
-
-from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
-from ray.rllib.core.rl_module.rl_module import RLModuleSpec
-from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
+from ray.rllib.core.rl_module.marl_module import MultiAgentRLModuleSpec
+from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
+from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv, ParallelPettingZooEnv
 from ray.rllib.utils.test_utils import (
     add_rllib_example_script_args,
     run_rllib_example_script_experiment,
@@ -40,47 +37,40 @@ parser = add_rllib_example_script_args(
 )
 
 from pettingzoo.sisl import waterworld_v4
-#register_env("env", lambda _: PettingZooEnv(waterworld_v4.env()))
-#policies = {f"pursuer_{i}" for i in range(args.num_agents)}
-
-from pettingzoo.sisl import multiwalker_v9
-#register_env("env", lambda _: PettingZooEnv(multiwalker_v9.env()))
-#policies = {f"walker_{i}" for i in range(args.num_agents)}
-
-
 
 if __name__ == "__main__":
     args = parser.parse_args()
 
     assert args.num_agents > 0, "Must set --num-agents > 0 when running this script!"
-    #assert (
-    #    args.enable_new_api_stack
-    #), "Must set --enable-new-api-stack when running this script!"
-
-    # Here, we use the "Agent Environment Cycle" (AEC) PettingZoo environment type.
-    # For a "Parallel" environment example, see the rock paper scissors examples
-    # in this same repository folder.
-    register_env("env", lambda _: PettingZooEnv(waterworld_v4.env()))
-
-    # Policies are called just like the agents (exact 1:1 mapping).
+    
+    #register_env("env", lambda _: PettingZooEnv(waterworld_v4.env()))
+    #register_env("env", lambda _: PettingZooEnv(waterworld_v4.parallel_env(n_pursuers=args.num_agents)))
+    register_env("env", lambda _: ParallelPettingZooEnv(waterworld_v4.parallel_env(n_pursuers=args.num_agents)))
     policies = {f"pursuer_{i}" for i in range(args.num_agents)}
+        
+    #register_env("env", lambda _: PettingZooEnv(multiwalker_v9.env()))
+    #policies = {f"walker_{i}" for i in range(args.num_agents)}
+
+    #register_env("env", lambda _: PettingZooEnv(pursuit_v4.env()))
+    #policies = {f"pursuer_{i}" for i in range(args.num_agents)}
 
     base_config = (
         get_trainable_cls(args.algo)
         .get_default_config()
-        .environment("env")
+        .environment(
+            #waterworld_v4,#.env(n_pursuers=args.num_agents)
+            "env",
+            env_config={"n_pursuers": args.num_agents},
+        )
         .multi_agent(
             policies=policies,
             # Exact 1:1 mapping from AgentID to ModuleID.
             policy_mapping_fn=(lambda aid, *args, **kwargs: aid),
         )
-        .training(
-            vf_loss_coeff=0.005,
-        )
         .rl_module(
             model_config_dict={"vf_share_layers": True},
-            rl_module_spec=MultiRLModuleSpec(
-                module_specs={p: RLModuleSpec() for p in policies},
+            rl_module_spec=MultiAgentRLModuleSpec(
+                module_specs={p: SingleAgentRLModuleSpec() for p in policies},
             ),
         )
     )
