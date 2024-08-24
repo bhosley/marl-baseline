@@ -3,6 +3,7 @@
 How to run this script
 ----------------------
 `python [script file name].py --enable-new-api-stack --num-agents=2`
+`python test.py --enable-new-api-stack --num-agents=2 --checkpoint-at-end`
 
 Control the number of agents and policies (RLModules) via --num-agents and
 --num-policies.
@@ -31,12 +32,18 @@ from ray.tune.registry import get_trainable_cls, register_env
 
 
 parser = add_rllib_example_script_args(
-    default_iters=10,#200
+    default_iters=3,#200
     default_timesteps=1000000,
     default_reward=0.0,
 )
 
 from pettingzoo.sisl import waterworld_v4
+
+
+def new_policy_mapping_fn(agent_id, episode, worker, **kwargs):
+    return agent_id if agent_id in trained_pols else choice(trained_pols)
+
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -45,7 +52,7 @@ if __name__ == "__main__":
     
     #register_env("env", lambda _: PettingZooEnv(waterworld_v4.env()))
     #register_env("env", lambda _: PettingZooEnv(waterworld_v4.parallel_env(n_pursuers=args.num_agents)))
-    register_env("env", lambda _: ParallelPettingZooEnv(waterworld_v4.parallel_env(n_pursuers=args.num_agents)))
+    register_env("env_base", lambda _: ParallelPettingZooEnv(waterworld_v4.parallel_env(n_pursuers=args.num_agents)))
     policies = {f"pursuer_{i}" for i in range(args.num_agents)}
         
     #register_env("env", lambda _: PettingZooEnv(multiwalker_v9.env()))
@@ -59,8 +66,8 @@ if __name__ == "__main__":
         .get_default_config()
         .environment(
             #waterworld_v4,#.env(n_pursuers=args.num_agents)
-            "env",
-            env_config={"n_pursuers": args.num_agents},
+            "env_base",
+            #env_config={"n_pursuers": args.num_agents},
         )
         .multi_agent(
             policies=policies,
@@ -76,3 +83,15 @@ if __name__ == "__main__":
     )
 
     run_rllib_example_script_experiment(base_config, args)
+    #results = run_rllib_example_script_experiment(base_config, args)
+
+    #path_to_checkpoint = results.experiment_path
+
+    #for test_agents in range(2,8+1):
+    #    test_pols = {f"pursuer_{i}" for i in range(test_agents)}
+#
+    #    restored_algo = Algorithm.from_checkpoint(
+    #        checkpoint=path_to_checkpoint,
+    #        policy_ids=test_pols,  # <- restore only those policy IDs here.
+    #        policy_mapping_fn=new_policy_mapping_fn,  # <- use this new mapping fn.
+    #    )
