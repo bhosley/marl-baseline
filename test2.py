@@ -1,6 +1,6 @@
 """Runs env in RLlib 
 
-`python test2.py --output /root/scrap_outputs`
+`python test2.py --enable-new-api-stack --output /root/scrap_outputs`
 
 """
 
@@ -8,7 +8,8 @@ from glob import glob
 
 exp_dir = glob("/root/ray_results/*")
 exp_dir.sort()
-exp = exp_dir[-1] # most recent experiment
+#exp = exp_dir[-1] # most recent experiment
+exp = exp_dir[24] # known good; for testing purposes
 #
 #print(exp)
 #print(  glob(exp+"/PPO_env*/*")  )
@@ -19,7 +20,7 @@ try:
 finally:
     pass
 
-trained_pols = glob(exp + "/**/*pur*", recursive=True)
+trained_pols = glob(checkpoint + "/**/*pur*", recursive=True)
 # Trained Pols is a list of the location of the policy directories
 # Dir contains a class and stor pickle and module state pytorch file
 
@@ -38,9 +39,10 @@ from ray.tune.registry import get_trainable_cls, register_env
 from ray.rllib.algorithms.algorithm import Algorithm
 
 
+from pettingzoo.sisl import waterworld_v4
 
 parser = add_rllib_example_script_args(
-    default_iters=1, default_reward=300, default_timesteps=50000)
+    default_iters=10, default_reward=300, default_timesteps=500)
 
 parser.add_argument(
     "--reps", type=int, default=1,
@@ -53,6 +55,14 @@ def new_policy_mapping_fn(agent_id, episode, worker, **kwargs):
 
 
 #print(f"{glob(trained_pols[0]+'/*')=}")
+#print(trained_pols)
+
+#from ray.rllib.policy.policy import Policy
+
+#restored_pol = Policy.from_checkpoint(checkpoint)
+
+#print(type(restored_pol))
+#print(restored_pol)
 
 
 if __name__ == "__main__":
@@ -61,52 +71,37 @@ if __name__ == "__main__":
 
     for num_test_agents in [2]:
     #for num_test_agents in range(2,8+1):
+        
         test_pols = {f"pursuer_{i}" for i in range(num_test_agents)}
-        register_env("env_test", lambda _: ParallelPettingZooEnv(waterworld_v4.parallel_env(n_pursuers=args.num_test_agents)))
+        register_env("env_test", lambda _: ParallelPettingZooEnv(waterworld_v4.parallel_env(n_pursuers=num_test_agents)))
 
 
         base_config = (
             get_trainable_cls(args.algo)
             .get_default_config()
             .environment("env_test")
+            
             .rl_module(
-                model_config_dict={"vf_share_layers": True},
+                #model_config_dict={"vf_share_layers": True},
                 rl_module_spec=MultiAgentRLModuleSpec(
-                    module_specs={p: SingleAgentRLModuleSpec(
-                        load_state_path=checkpoint+"/learner_group/learner/rl_module/"+p
+                    #module_specs={p: SingleAgentRLModuleSpec(
+                    #    load_state_path=checkpoint+"/learner_group/learner/rl_module/"+p
+                    #) for p in test_pols},
+                    module_specs={p: #SingleAgentRLModule
+                        #@Deprecated(new="RLModule.restore_from_path(...)", error=True)
+                        SingleAgentRLModuleSpec(
+                        load_state_path=f"{checkpoint}/learner_group/learner/rl_module/{p}/"
                     ) for p in test_pols},
-                ),
+                )
             )
 
             .multi_agent(
                 policies=test_pols,
                 # Exact 1:1 mapping from AgentID to ModuleID.
-                #policy_mapping_fn=(lambda aid, *args, **kwargs: aid),
-                policy_mapping_fn=new_policy_mapping_fn
+                policy_mapping_fn=(lambda aid, *args, **kwargs: aid),
+                #policy_mapping_fn=new_policy_mapping_fn
             )
 
         )
 
-
-        #################
-        #print(f"{len(trained_pols)=}")
-        exit()
-        #################  
-
         run_rllib_example_script_experiment(base_config, args)
-
-"""
-    restored_algo = Algorithm.from_checkpoint(
-        checkpoint=path_to_checkpoint,
-        policy_ids=test_pols,  # <- restore only those policy IDs here.
-        policy_mapping_fn=new_policy_mapping_fn,  # <- use this new mapping fn.
-    )
-
-    restored_algo.train()
-    # Terminate the new algo.
-    restored_algo.stop()
-
-+ "PPO_env
-
-
-"""

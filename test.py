@@ -2,8 +2,18 @@
 
 How to run this script
 ----------------------
+`
+python test.py --wandb-project=mini_test_ww2 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f \
+--num-samples=10 --num-env-runners=30 --enable-new-api-stack --checkpoint-at-end --num-agents=3
+`
+
+python test.py --output /root/scrap_outputs --num-agents=2
+
+--wandb-run-name 
+
+
+
 `python [script file name].py --enable-new-api-stack --num-agents=2`
-`python test.py --enable-new-api-stack --num-agents=2 --checkpoint-at-end`
 
 Control the number of agents and policies (RLModules) via --num-agents and
 --num-policies.
@@ -32,7 +42,7 @@ from ray.tune.registry import get_trainable_cls, register_env
 
 
 parser = add_rllib_example_script_args(
-    default_iters=3,#200
+    default_iters=200,
     default_timesteps=1000000,
     default_reward=0.0,
 )
@@ -52,7 +62,7 @@ if __name__ == "__main__":
     
     #register_env("env", lambda _: PettingZooEnv(waterworld_v4.env()))
     #register_env("env", lambda _: PettingZooEnv(waterworld_v4.parallel_env(n_pursuers=args.num_agents)))
-    register_env("env_base", lambda _: ParallelPettingZooEnv(waterworld_v4.parallel_env(n_pursuers=args.num_agents)))
+    register_env(f"{args.num_agents}_agent_env", lambda _: ParallelPettingZooEnv(waterworld_v4.parallel_env(n_pursuers=args.num_agents)))
     policies = {f"pursuer_{i}" for i in range(args.num_agents)}
         
     #register_env("env", lambda _: PettingZooEnv(multiwalker_v9.env()))
@@ -66,7 +76,7 @@ if __name__ == "__main__":
         .get_default_config()
         .environment(
             #waterworld_v4,#.env(n_pursuers=args.num_agents)
-            "env_base",
+            f"{args.num_agents}_agent_env",
             #env_config={"n_pursuers": args.num_agents},
         )
         .multi_agent(
