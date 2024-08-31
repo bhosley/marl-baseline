@@ -9,6 +9,8 @@ python test.py --wandb-project=mini_test_ww2 --wandb-key=913528a8e92bf601b6eb055
 
 python test.py --output /root/scrap_outputs --num-agents=2
 
+python test.py --stop-iters=5 --checkpoint-at-end --num-agents=2
+
 --wandb-run-name 
 
 
