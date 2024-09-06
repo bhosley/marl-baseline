@@ -1,7 +1,16 @@
 """Runs env in RLlib 
 
-`python test2.py --enable-new-api-stack --output /root/scrap_outputs`
+`
+python test2.py --enable-new-api-stack --output /root/scrap_outputs \
+--wandb-project=temp --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f    
+`
 
+
+known good 2 agent path:
+
+/root/ray_results/PPO_2024-08-24_02-26-37/PPO_env_base_49eff_00000_0_2024-08-24_02-26-37/checkpoint_000000/
+
+/root/ray_results/PPO_2024-08-24_02-26-37/PPO_env_base_49eff_00000_0_2024-08-24_02-26-37/checkpoint_000000/learner_group/learner/rl_module/pursuer_0/
 """
 
 from glob import glob
@@ -42,7 +51,7 @@ from ray.rllib.algorithms.algorithm import Algorithm
 from pettingzoo.sisl import waterworld_v4
 
 parser = add_rllib_example_script_args(
-    default_iters=10, default_reward=300, default_timesteps=500)
+    default_iters=3, default_reward=300, default_timesteps=500)
 
 parser.add_argument(
     "--reps", type=int, default=1,
@@ -75,6 +84,10 @@ if __name__ == "__main__":
         test_pols = {f"pursuer_{i}" for i in range(num_test_agents)}
         register_env("env_test", lambda _: ParallelPettingZooEnv(waterworld_v4.parallel_env(n_pursuers=num_test_agents)))
 
+        module_specs = {p: SingleAgentRLModuleSpec(
+                        #@Deprecated(new="RLModule.restore_from_path(...)", error=True)
+                        #load_state_path=f"{checkpoint}/learner_group/learner/rl_module/{p}/"
+                    ) for p in test_pols}
 
         base_config = (
             get_trainable_cls(args.algo)
@@ -84,14 +97,7 @@ if __name__ == "__main__":
             .rl_module(
                 #model_config_dict={"vf_share_layers": True},
                 rl_module_spec=MultiAgentRLModuleSpec(
-                    #module_specs={p: SingleAgentRLModuleSpec(
-                    #    load_state_path=checkpoint+"/learner_group/learner/rl_module/"+p
-                    #) for p in test_pols},
-                    module_specs={p: #SingleAgentRLModule
-                        #@Deprecated(new="RLModule.restore_from_path(...)", error=True)
-                        SingleAgentRLModuleSpec(
-                        load_state_path=f"{checkpoint}/learner_group/learner/rl_module/{p}/"
-                    ) for p in test_pols},
+                    module_specs=module_specs,
                 )
             )
 
@@ -105,3 +111,34 @@ if __name__ == "__main__":
         )
 
         run_rllib_example_script_experiment(base_config, args)
+
+
+"""     
+.rl_module(
+    rl_module_spec=MultiRLModuleSpec(
+        module_specs=module_specs
+    )
+)
+
+module_specs = {}
+
+module_class = PPOTorchRLModule
+for i in range(args.num_agents):
+    module_specs[f"policy_{i}"] = RLModuleSpec(
+        module_class=PPOTorchRLModule,
+        observation_space=env.observation_space,
+        action_space=env.action_space,
+        model_config_dict={"fcnet_hiddens": [32]},
+        catalog_class=PPOCatalog,
+    )
+
+module_specs["policy_0"] = RLModuleSpec(
+        module_class=PPOTorchRLModule,
+        observation_space=env.observation_space,
+        action_space=env.action_space,
+        model_config_dict={"fcnet_hiddens": [64]},
+        catalog_class=PPOCatalog,
+        # Note, we load here the module directly from the checkpoint.
+        load_state_path=module_chkpt_path,
+)
+"""    
