@@ -40,37 +40,6 @@ parser = add_rllib_example_script_args(
     default_reward=300,
 )
 
-class MyCallbacks(DefaultCallbacks):
-    def on_episode_start(
-        self,
-        *,
-        worker: RolloutWorker,
-        base_env: BaseEnv,
-        policies: Dict[str, Policy],
-        episode: Episode,
-        env_index: int,
-        **kwargs,
-    ):
-        assert episode.length == 0, (
-            "ERROR: `on_episode_start()` callback should be called right "
-            "after env reset!"
-        )
-        # Record the number of agents
-
-    def on_episode_step(
-        self,
-        *,
-        worker: RolloutWorker,
-        base_env: BaseEnv,
-        policies: Dict[str, Policy],
-        episode: Episode,
-        env_index: int,
-        **kwargs,
-    ):
-        pass
-        # Normalized return?
-
-
 
 if __name__ == "__main__":
     args = parser.parse_args()
