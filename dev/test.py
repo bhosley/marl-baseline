@@ -27,6 +27,9 @@ from ray.rllib.policy.policy import Policy
 from ray.rllib.utils.test_utils import (add_rllib_example_script_args,
                                         run_rllib_example_script_experiment)
 from ray.tune.registry import get_trainable_cls, register_env
+from ray.tune.stopper import (  CombinedStopper, TrialPlateauStopper,
+                                MaximumIterationStopper, FunctionStopper)
+
 
 
 parser = add_rllib_example_script_args(
@@ -66,7 +69,8 @@ class MetricCallbacks(DefaultCallbacks):
         # pylint: disable-next=used-before-assignment
         result["num_agents"] = args.num_agents
         result["num_pretrained"] = args.num_pols
-
+        result["episode_reward_mean"] = (
+            result['env_runners']["episode_reward_mean"])
 
 def get_policy_set(pols, n, rand=True):
     """Takes pretrained policy set, and returns a new set of n-length"""
@@ -134,7 +138,36 @@ if __name__ == "__main__":
     # Training new policies from scratch
     if args.mode == 'train':
         assert args.num_agents > 0, "Must set --num-agents > 0 when training!"
-        run_rllib_example_script_experiment(base_config, args, scheduler=None)
+
+        # Reimplement stopping criteria; including original max iters,
+        # max timesteps, max reward, and adding plateau
+        stopper = CombinedStopper(
+            MaximumIterationStopper(max_iter=args.stop_iters),
+            FunctionStopper(lambda trial_id, result: (
+                result["num_env_steps_sampled_lifetime"] >= args.stop_timesteps)
+            ),
+            FunctionStopper(lambda trial_id, result: (
+                result["episode_reward_mean"] >= args.stop_reward)
+            ),
+            TrialPlateauStopper(
+                metric="episode_reward_mean",
+                num_results=10, std=5
+            ),
+        )
+
+        # Conduct the experiement
+        o = run_rllib_example_script_experiment(base_config, args, stop=stopper)
+
+        # Organize results
+        if args.checkpoint_at_end:
+            import shutil
+            for i, res in enumerate(o):
+                source = res.path
+                score = res.metrics['env_runners']['episode_reward_mean']
+                dest = (f"/root/test/{args.env}/{args.algo}/" +
+                        f"{args.num_agents}_agent/{score}")
+                shutil.move(source, dest, copy_function = shutil.copytree)
+
         exit()
 
 
@@ -216,6 +249,7 @@ if __name__ == "__main__":
                 out = algo.evaluate()
                 out["env_runners"]['test_agents'] = test_agents
                 out["env_runners"]['trained_agents'] = args.num_pols
+                #out["env_runners"]['selection_mode'] = 
                 if use_wandb:
                     wandb.log(out["env_runners"])
 
