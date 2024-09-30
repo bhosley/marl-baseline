@@ -14,6 +14,9 @@ For logging to your WandB account, use:
 --wandb-run-name=[optional: WandB run name (within the defined project)]`
 
 """
+
+# pylint: disable=fixme
+
 from random import shuffle
 from argparse import ArgumentParser
 import numpy as np
@@ -29,7 +32,6 @@ from ray.rllib.utils.test_utils import (add_rllib_example_script_args,
 from ray.tune.registry import get_trainable_cls, register_env
 from ray.tune.stopper import (  CombinedStopper, TrialPlateauStopper,
                                 MaximumIterationStopper, FunctionStopper)
-
 
 
 parser = add_rllib_example_script_args(
@@ -91,7 +93,6 @@ def get_policy_set(pols, n, rand=True):
 if __name__ == "__main__":
     args = parser.parse_args()
 
-
     # Environment Switch Case
     match args.env:
 
@@ -121,8 +122,7 @@ if __name__ == "__main__":
         .get_default_config()
         .environment( f"{args.num_agents}_agent_{args.env}" )
         .multi_agent(
-            policies=policies,
-            # Exact 1:1 mapping from AgentID to ModuleID.
+            policies=policies, # Exact 1:1 mapping from AgentID to ModuleID.
             policy_mapping_fn=(lambda aid, *args, **kwargs: aid),
         )
         .rl_module(
@@ -151,7 +151,7 @@ if __name__ == "__main__":
             ),
             TrialPlateauStopper(
                 metric="episode_reward_mean",
-                num_results=10, std=5
+                num_results=15, std=3
             ),
         )
 
@@ -162,7 +162,7 @@ if __name__ == "__main__":
         if args.checkpoint_at_end:
             import shutil
             for i, res in enumerate(o):
-                source = res.path
+                source = res.path + "/checkpoint_000000"
                 score = res.metrics['env_runners']['episode_reward_mean']
                 dest = (f"/root/test/{args.env}/{args.algo}/" +
                         f"{args.num_agents}_agent/{score}")
@@ -171,22 +171,22 @@ if __name__ == "__main__":
         exit()
 
 
+
+
+
     # If we are not training from scratch
     if args.mode != 'train':
         # We will need to import a previous checkpoint
         from glob import glob
         from os import path
 
-
         # Loading function:
         if args.path:
-            # pylint: disable=fixme
             # TODO: Check validity of provided path
             path_to_checkpoint = args.path
         else:
             raise TypeError("Missing path to checkpoint argument.")
             #print("No path provided, searching RLlib default location")
-            # pylint: disable=fixme
             # TODO: need to locate and assign a path automatically
 
         trained_pols = glob(path_to_checkpoint+"/policies/*")
@@ -219,6 +219,7 @@ if __name__ == "__main__":
             for test_agents in range(2,9):
                 register_env(f"{test_agents}_agent_{args.env}", lambda _:
                     ParallelPettingZooEnv(
+                        # TODO: Fix Hardcoded environment
                         waterworld_v4.parallel_env(n_pursuers=test_agents)))
                 policies = {f"pursuer_{i}" for i in range(test_agents)}
 
@@ -249,7 +250,7 @@ if __name__ == "__main__":
                 out = algo.evaluate()
                 out["env_runners"]['test_agents'] = test_agents
                 out["env_runners"]['trained_agents'] = args.num_pols
-                #out["env_runners"]['selection_mode'] = 
+                #out["env_runners"]['selection_mode'] =
                 if use_wandb:
                     wandb.log(out["env_runners"])
 
