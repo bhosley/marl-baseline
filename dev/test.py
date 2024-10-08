@@ -260,9 +260,3 @@ if __name__ == "__main__":
                 wandb.finish()
 
         exit()
-
-
-    # Secondary Training:
-    #   need new env number
-    #if args.mode == 'retrain':
-    #    pass

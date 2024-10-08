@@ -17,16 +17,15 @@ For logging to your WandB account, use:
 
 # pylint: disable=fixme
 
-from glob import glob
-import numpy as np
 import wandb
 
 from ray.rllib.core.rl_module.marl_module import MultiAgentRLModuleSpec
 from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
-from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
-from ray.rllib.policy.policy import Policy
+#from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
 from ray.rllib.utils.test_utils import add_rllib_example_script_args
-from ray.tune.registry import get_trainable_cls, register_env
+from ray.tune.registry import get_trainable_cls#, register_env
+
+from Support import get_eligible_policies, get_policy_set
 
 # Establish depth of experimental directory (level of env in path)
 #   ex. /root/test/waterworld/PPO/2_agent/ -> 3
@@ -53,45 +52,7 @@ parser.add_argument(
 )
 
 
-
-def get_eligible_policies(args):
-    """Return a list of policy objects based on parsed args"""
-    recon_path = f'{args.prefix}{args.env}/{args.algo}/{args.num_agents}_agent/'
-    if args.training_score:
-        recon_path += str(args.training_score)
-
-    # Sort by descending value
-    roster = sorted(glob(recon_path+"*"), reverse=True)
-
-    # Number of training instances to pool
-    if isinstance(args.pool_size, int):
-        num = args.pool_size
-    else: # then it must be a float
-        num = -int( args.pool_size * len(roster) // -1 ) # Rounded Up
-
-    # Get policies from checkpoints from each training instance in roster
-    pols = [Policy.from_checkpoint(p)
-            for i in roster[:num]
-            for p in glob(f"{i}/policies/*")]
-    return pols
-
-
-def get_policy_set(pols,n, args):
-    """Takes pretrained policy set, and returns a new set of n-length"""
-    if args.replacement:
-        return np.random.choice(pols,n)
-    else:
-        new_set = []
-        while len(new_set) < n:
-            dif = min(len(pols),n-len(new_set))
-            for e in np.random.choice(pols, dif, replace=False):
-                new_set.append(e)
-        return new_set
-
-
-
-def main():
-    """Main defined as a function global scoping of variables"""
+if __name__ == "__main__":
     args = parser.parse_args()
     using_wandb = hasattr(args, "wandb_key") and args.wandb_key is not None
 
@@ -122,26 +83,19 @@ def main():
 
     # Environment Switch Case
     match args.env:
-        # pylint: disable=C0415
-
-        case 'multiwalker':
-            raise NotImplementedError("This environment not yet implemented")
-
-        case 'pursuit':
-            raise NotImplementedError("This environment not yet implemented")
-
         case 'waterworld':
-            from pettingzoo.sisl import waterworld_v4
-            agent_range = range(2,9)
-            # Pre-register each version of environment
-            # TODO: Is this the best way?
-            for a in agent_range:
-                register_env(f"{a}_agent_waterworld", lambda _:
-                    ParallelPettingZooEnv(
-                        waterworld_v4.parallel_env(n_pursuers=a)))
-            def blank_policies(n):
-                return {f"pursuer_{i}" for i in range(n)}
+            from Support import Waterworld
+            env = Waterworld()
+        case 'multiwalker':
+            from Support import MultiWalker
+            env = MultiWalker()
+        case 'pursuit':
+            from Support import Pursuit
+            env = Pursuit()
 
+    # Pre-register each version of environment
+    for n in env.agent_range:
+        env.register(n)
 
     # Sample loop
     for _ in range(args.num_samples):
@@ -149,8 +103,8 @@ def main():
             wandb.init(project = args.wandb_project or "Eval_Test")
 
         # Loop for agent range
-        for test_agents in agent_range:
-            policies = blank_policies(n=test_agents)
+        for test_agents in env.agent_range:
+            policies = env.blank_policies(test_agents)
 
             base_config = (
                 get_trainable_cls(args.algo)
@@ -191,8 +145,4 @@ def main():
             wandb.finish()
 
     # End of Sample loops
-
-
-if __name__ == "__main__":
-    main()
     exit()

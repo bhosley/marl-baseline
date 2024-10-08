@@ -17,16 +17,17 @@ For logging to your WandB account, use:
 
 # pylint: disable=fixme
 
-from argparse import ArgumentParser
-
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.core.rl_module.marl_module import MultiAgentRLModuleSpec
 from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
-from ray.rllib.utils.test_utils import (add_rllib_example_script_args,
-                                        run_rllib_example_script_experiment)
+from ray.rllib.utils.test_utils import add_rllib_example_script_args
 from ray.tune.registry import get_trainable_cls
-from ray.tune.stopper import (  CombinedStopper, TrialPlateauStopper,
-                                MaximumIterationStopper, FunctionStopper)
+
+from Support import get_eligible_policies, get_policy_set
+
+# Establish depth of experimental directory (level of env in path)
+#   ex. /root/test/waterworld/PPO/2_agent/ -> 3
+DIR_DEPTH = 3
 
 
 class MetricCallbacks(DefaultCallbacks):
@@ -38,23 +39,52 @@ class MetricCallbacks(DefaultCallbacks):
 
 
 parser = add_rllib_example_script_args(
-    ArgumentParser(conflict_handler='resolve'), # Resolve for env
     default_iters=200,
     default_timesteps=1000000,
     default_reward=300,
 )
 parser.add_argument(
-    "--env", type=str, default="waterworld",
-    choices=["waterworld"],
-    help="The environment to use."
-    "`waterworld`: SISL WaterWorld"
-    "`multiwalker`: SISL Multiwalker (Not tested yet)."
-    "`pursuit`: SISL pursuit (Not tested yet).",
+    "--path", type=str, default=None, required=True,
+    help="absolute path to checkpoint",
 )
+parser.add_argument(
+    "-r", "--replacement", action="store_true",
+    help="Use replacement of elements in policy selection method.",
+)
+parser.add_argument(
+    "--pool-size", default=1,
+    help="The best <int> or <float> proportion of policy"
+    "sets to draw new policies from.",
+)
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    assert args.num_agents > 0, "Must set --num-agents > 0 when training!"
+
+    # Check validity of pool size
+    try:
+        args.pool_size = int(args.pool_size)
+    except ValueError:
+        try:
+            args.pool_size = float(args.pool_size)
+        except ValueError:
+            print(f"{type(args.pool_size)} is an invalid pool type")
+
+    # Ingest the provided path. A valid path will always have this first part.
+    _path = args.path.split("/")
+    args.prefix = ''.join(f'{_path.pop(0)}/' for _ in range(DIR_DEPTH))
+    args.env = _path.pop(0)
+    args.algo = _path.pop(0)
+    args.num_agents = _path.pop(0).split("_")[0]
+
+    # Check if training instance is specified
+    try:
+        args.training_score = float(_path.pop(0))
+    except (IndexError, ValueError): # no / at end of path, or no score
+        args.training_score = None
+
+    # Get Agent Pool
+    trained_pols = get_eligible_policies(args)
 
     # Environment Switch Case
     match args.env:
@@ -68,8 +98,15 @@ if __name__ == "__main__":
             from Support import Pursuit
             env = Pursuit()
 
+
+
+
+
+
     env.register(args.num_agents)
     policies = env.blank_policies(args.num_agents)
+
+
 
     base_config = (
         get_trainable_cls(args.algo)
@@ -88,33 +125,8 @@ if __name__ == "__main__":
         .callbacks(MetricCallbacks)
     )
 
-    # Reimplement stopping criteria; including original max iters,
-    # max timesteps, max reward, and adding plateau
-    stopper = CombinedStopper(
-        MaximumIterationStopper(max_iter=args.stop_iters),
-        FunctionStopper(lambda trial_id, result: (
-            result["num_env_steps_sampled_lifetime"] >= args.stop_timesteps)
-        ),
-        FunctionStopper(lambda trial_id, result: (
-            result["episode_reward_mean"] >= args.stop_reward)
-        ),
-        TrialPlateauStopper(
-            metric="episode_reward_mean",
-            num_results=15, std=2
-        ),
-    )
 
-    # Conduct the experiement
-    ress = run_rllib_example_script_experiment(base_config, args, stop=stopper)
+    # stoppers
 
-    # Organize results
-    if args.checkpoint_at_end:
-        import shutil
-        for i, res in enumerate(ress):
-            source = res.path + "/checkpoint_000000"
-            score = res.metrics['env_runners']['episode_reward_mean']
-            dest = (f"/root/test/{args.env}/{args.algo}/" +
-                    f"{args.num_agents}_agent/{score}")
-            shutil.move(source, dest, copy_function = shutil.copytree)
+    # run experiment
 
-    exit()
