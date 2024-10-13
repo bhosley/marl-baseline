@@ -48,6 +48,7 @@ class EnvironmentBase():
         self.env_name = kwargs.get('env_name', 'unnammmed_environment')
         self.agent_name = kwargs.get('agent_name', 'unnamed_agent')
         self.agent_range = kwargs.get('agent_range',range(2,5))
+        self.plateau_std = kwargs.get('plateau_std',2)
 
     def blank_policies(self, num_agents=None) -> set:
         """Return a set of n policy names, default to max test range"""
@@ -66,7 +67,8 @@ class Waterworld(EnvironmentBase):
         super().__init__(
             env_name = 'waterworld',
             agent_name = 'pursuer',
-            agent_range = range(2,9)
+            agent_range = range(2,9),
+            plateau_std = 2,
         )
 
     def register(self, num_agents) -> None:

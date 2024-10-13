@@ -100,7 +100,7 @@ if __name__ == "__main__":
         ),
         TrialPlateauStopper(
             metric="episode_reward_mean",
-            num_results=15, std=2
+            num_results=15, std=env.plateau_std
         ),
     )
 
