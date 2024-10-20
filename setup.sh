@@ -3,10 +3,12 @@
 # update environment's package manager
 apt update && apt upgrade -y
 
+# Multiplexing allows for async execution of scripts
+apt-get install tmux
+
 # install python requirements
 apt install -y python3-pip
 python3 -m pip install --upgrade pip
-#python3 -m pip install -r requirements.txt
 # Due to dependency issues .txt method will not work
 # Python libs must be installed in groups
 
