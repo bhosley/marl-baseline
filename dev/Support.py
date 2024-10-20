@@ -10,7 +10,7 @@ from ray.tune.registry import register_env
 
 def get_eligible_policies(args):
     """Return a list of policy objects based on parsed args"""
-    recon_path = f'{args.prefix}{args.env}/{args.algo}/{args.num_agents}_agent/'
+    recon_path = f'{args.prefix}{args.env}/{args.algo}/{args.trained_agents}_agent/'
     if args.training_score:
         recon_path += str(args.training_score)
 

@@ -21,7 +21,8 @@ from argparse import ArgumentParser
 
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.core.rl_module.marl_module import MultiAgentRLModuleSpec
-from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
+#from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
+from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.utils.test_utils import (add_rllib_example_script_args,
                                         run_rllib_example_script_experiment)
 from ray.tune.registry import get_trainable_cls
@@ -82,7 +83,8 @@ if __name__ == "__main__":
         .rl_module(
             model_config_dict={"vf_share_layers": True},
             rl_module_spec=MultiAgentRLModuleSpec(
-                module_specs={p: SingleAgentRLModuleSpec() for p in policies},
+                #module_specs={p: SingleAgentRLModuleSpec() for p in policies},
+                module_specs={p: RLModuleSpec() for p in policies},
             ),
         )
         .callbacks(MetricCallbacks)
@@ -115,6 +117,14 @@ if __name__ == "__main__":
             score = res.metrics['env_runners']['episode_reward_mean']
             dest = (f"/root/test/{args.env}/{args.algo}/" +
                     f"{args.num_agents}_agent/{score}")
-            shutil.move(source, dest, copy_function = shutil.copytree)
+            shutil.copytree(source, dest, dirs_exist_ok=True)
+            #try:
+            #except FileNotFoundError: # raised also on missing dest parent dir
+            #    # try creating parent directories
+            #    import os
+            #    os.makedirs(os.path.dirname(dest), exist_ok=True)
+            #    shutil.copytree(source, dest, dirs_exist_ok=True)
+            #    shutil.move(source, dest, copy_function = shutil.copytree)
+
 
     exit()

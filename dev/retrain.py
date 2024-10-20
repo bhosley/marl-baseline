@@ -17,22 +17,17 @@ For logging to your WandB account, use:
 
 # pylint: disable=fixme
 
-from ray.air.constants import TRAINING_ITERATION
+import ray
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.core.rl_module.marl_module import MultiAgentRLModuleSpec
-from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
-from ray.rllib.utils.metrics import (
-        ENV_RUNNER_RESULTS,
-        EPISODE_RETURN_MEAN,
-        NUM_ENV_STEPS_SAMPLED_LIFETIME,
-    )
-from ray.rllib.utils.test_utils import add_rllib_example_script_args
-from ray.tune import CLIReporter
-from ray.tune.registry import get_trainable_cls
+#from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
+from ray.rllib.core.rl_module.rl_module import RLModuleSpec
+from ray.rllib.utils.test_utils import (add_rllib_example_script_args,
+                                        run_rllib_example_script_experiment)
+from ray.tune.registry import get_trainable_cls, register_trainable
 from ray.tune.stopper import (  CombinedStopper, TrialPlateauStopper,
                                 MaximumIterationStopper, FunctionStopper)
-
 
 from Support import get_eligible_policies, get_policy_set
 
@@ -87,7 +82,8 @@ if __name__ == "__main__":
     args.prefix = ''.join(f'{_path.pop(0)}/' for _ in range(DIR_DEPTH))
     args.env = _path.pop(0)
     args.algo = _path.pop(0)
-    args.num_agents = _path.pop(0).split("_")[0]
+    args.trained_agents = _path.pop(0).split("_")[0]
+    args.test_agents = args.num_agents
 
     # Check if training instance is specified
     try:
@@ -97,6 +93,8 @@ if __name__ == "__main__":
 
     # Get Agent Pool
     trained_pols = get_eligible_policies(args)
+
+
 
     # Environment Switch Case
     match args.env:
@@ -113,26 +111,8 @@ if __name__ == "__main__":
     env.register(args.num_agents)
     policies = env.blank_policies(args.num_agents)
 
-    base_config = (
-        get_trainable_cls(args.algo)
-        .get_default_config()
-        .environment( f"{args.num_agents}_agent_{args.env}" )
-        .multi_agent(
-            policies=policies, # Exact 1:1 mapping from AgentID to ModuleID.
-            policy_mapping_fn=(lambda aid, *args, **kwargs: aid),
-        )
-        .rl_module(
-            model_config_dict={"vf_share_layers": True},
-            rl_module_spec=MultiAgentRLModuleSpec(
-                module_specs={p: SingleAgentRLModuleSpec() for p in policies},
-            ),
-        )
-        .callbacks(MetricCallbacks)
-        .env_runners(num_env_runners=args.num_env_runners)
-    )
 
-
-    # Use the same stoppers as baseline training. 
+    # Use the same stoppers as baseline training.
     # Except, include a benchmark score from previous training.
     stopper = CombinedStopper(
         MaximumIterationStopper(max_iter=args.stop_iters),
@@ -149,71 +129,43 @@ if __name__ == "__main__":
         ),
     )
 
-    # Log results using WandB.
-    tune_callbacks = []
-    if hasattr(args, "wandb_key") and (args.wandb_key is not None):
-        wandb_key = args.wandb_key
-        project = args.wandb_project or (
-            args.algo.lower() + "-" + str(env.env_name).lower()
-        )
-        tune_callbacks.append(
-            WandbLoggerCallback(
-                api_key=wandb_key,
-                project=project,
-                upload_checkpoints=True,
-                **({"name":args.wandb_run_name} if args.wandb_run_name else {}),
-            )
-        )
 
 
-    # Auto-configure a CLIReporter (to log the results to the console).
-    # Use better ProgressReporter for multi-agent cases: List individual policy rewards.
-    progress_reporter = CLIReporter(
-        metric_columns={
-            **{
-                TRAINING_ITERATION: "iter",
-                "time_total_s": "total time (s)",
-                NUM_ENV_STEPS_SAMPLED_LIFETIME: "ts",
-                f"{ENV_RUNNER_RESULTS}/{EPISODE_RETURN_MEAN}": "combined return",
-            },
-            **{
-                (
-                    f"{ENV_RUNNER_RESULTS}/module_episode_returns_mean/" f"{pid}"
-                ): f"return {pid}"
-                for pid in base_config.policies
-            },
-        },
+    base_config = (
+        get_trainable_cls(args.algo)
+        .get_default_config()
+        .environment( f"{args.num_agents}_agent_{args.env}" )
+        .multi_agent(
+            policies=policies, # Exact 1:1 mapping from AgentID to ModuleID.
+            policy_mapping_fn=(lambda aid, *args, **kwargs: aid),
+        )
+        .rl_module(
+            model_config_dict={"vf_share_layers": True},
+            rl_module_spec=MultiAgentRLModuleSpec(
+                #module_specs={p: SingleAgentRLModuleSpec() for p in policies},
+                module_specs={p: RLModuleSpec() for p in policies},
+            ),
+        )
+        .callbacks(MetricCallbacks)
+        .env_runners(num_env_runners=args.num_env_runners)
     )
 
 
+    # Get a set of policies from eligible pool
+    new_pols = get_policy_set(trained_pols,args.num_agents,args)
+    # Build an instance of the the algorithm from the base config
+    algo = base_config.build()
+
+    # and populate with the previously trained policies
+    for i in range(args.test_agents):
+        algo.get_policy(f"pursuer_{i}").set_weights(new_pols[i].get_weights())
+    # Register this new algorithm so that it is acessible to tune
+    register_trainable("cloned_algo", lambda _: algo)
 
 
+    print("starting example script")
+    run_rllib_example_script_experiment(
+        base_config, args, stop=stopper, trainable="cloned_algo")
 
 
-
-
-    # Run the actual experiment (using Tune).
-    start_time = time.time()
-    results = tune.Tuner(
-        trainable or config.algo_class,
-        param_space=config,
-        run_config=air.RunConfig(
-            stop=stop,
-            verbose=args.verbose,
-            callbacks=tune_callbacks,
-            checkpoint_config=air.CheckpointConfig(
-                checkpoint_frequency=args.checkpoint_freq,
-                checkpoint_at_end=args.checkpoint_at_end,
-            ),
-            progress_reporter=progress_reporter,
-        ),
-        tune_config=tune.TuneConfig(
-            num_samples=args.num_samples,
-            max_concurrent_trials=args.max_concurrent_trials,
-            scheduler=scheduler,
-        ),
-    ).fit()
-    time_taken = time.time() - start_time
-
-    ray.shutdown()
 

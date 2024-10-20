@@ -20,7 +20,8 @@ For logging to your WandB account, use:
 import wandb
 
 from ray.rllib.core.rl_module.marl_module import MultiAgentRLModuleSpec
-from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
+#from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
+from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 #from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
 from ray.rllib.utils.test_utils import add_rllib_example_script_args
 from ray.tune.registry import get_trainable_cls#, register_env
@@ -70,7 +71,7 @@ if __name__ == "__main__":
     args.prefix = ''.join(f'{_path.pop(0)}/' for _ in range(DIR_DEPTH))
     args.env = _path.pop(0)
     args.algo = _path.pop(0)
-    args.num_agents = _path.pop(0).split("_")[0]
+    args.trained_agents = _path.pop(0).split("_")[0]
 
     # Check if training instance is specified
     try:
@@ -118,7 +119,8 @@ if __name__ == "__main__":
                     model_config_dict={"vf_share_layers": True},
                     rl_module_spec=MultiAgentRLModuleSpec(
                         module_specs={
-                            p: SingleAgentRLModuleSpec() for p in policies},
+                            #p: SingleAgentRLModuleSpec() for p in policies},
+                            p: RLModuleSpec() for p in policies},
                     ),
                 )
                 .evaluation(evaluation_interval=1)
@@ -131,7 +133,7 @@ if __name__ == "__main__":
 
             out = algo.evaluate()
             out["env_runners"]['test_agents'] = test_agents
-            out["env_runners"]['trained_agents'] = args.num_agents
+            out["env_runners"]['trained_agents'] = args.trained_agents
             out["env_runners"]['replacement'] = args.replacement
             out["env_runners"]['pool_size'] = args.pool_size
 
