@@ -37,4 +37,4 @@ case $yesno in
     ;;
 esac
 
-printf "\nSetup complete"
+printf "\nSetup complete\n"
