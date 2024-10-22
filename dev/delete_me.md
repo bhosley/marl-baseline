@@ -203,7 +203,8 @@
     'num_env_steps_trained_this_iter': 4000, 
     'num_env_steps_sampled_throughput_per_sec': 193.09751730684857, 
     'num_env_steps_trained_throughput_per_sec': 193.09751730684857, 
-    'timesteps_total': 4000, 'num_env_steps_sampled_lifetime': 4000, 
+    'timesteps_total': 4000, 
+    'num_env_steps_sampled_lifetime': 4000, 
     'num_agent_steps_sampled_lifetime': 8000, 
     'num_steps_trained_this_iter': 4000, 
     'agent_timesteps_total': 8000, 
@@ -602,10 +603,12 @@
     'num_env_steps_sampled_lifetime': 808000, 
     'num_env_steps_trained_lifetime': 808000, 
     'num_episodes_lifetime': 808, 
-    'timers': {'env_runner_sampling_timer': 3.8765751347506137, 
-    'learner_update_timer': 13.514154431752878, 
-    'synch_env_connectors': 0.008218620302399324, 
-    'synch_weights': 0.012538271099729888}, 
+    'timers': {
+        'env_runner_sampling_timer': 3.8765751347506137, 
+        'learner_update_timer': 13.514154431752878, 
+        'synch_env_connectors': 0.008218620302399324, 
+        'synch_weights': 0.012538271099729888
+    }, 
     'fault_tolerance': {
         'num_healthy_workers': 2, 
         'num_in_flight_async_reqs': 0, 

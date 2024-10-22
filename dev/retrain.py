@@ -17,6 +17,9 @@ For logging to your WandB account, use:
 
 # pylint: disable=fixme
 
+from collections import deque
+import numpy as np
+
 import ray
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
@@ -29,20 +32,13 @@ from ray.tune.registry import get_trainable_cls, register_trainable
 from ray.tune.stopper import (  CombinedStopper, TrialPlateauStopper,
                                 MaximumIterationStopper, FunctionStopper)
 
+from ray.tune import CLIReporter
+
 from Support import get_eligible_policies, get_policy_set
 
 # Establish depth of experimental directory (level of env in path)
 #   ex. /root/test/waterworld/PPO/2_agent/ -> 3
 DIR_DEPTH = 3
-
-
-class MetricCallbacks(DefaultCallbacks):
-    """Class for storing all of the custom metrics used in this script"""
-    def on_train_result(self, *, algorithm, result: dict, **kwargs) -> None:
-        result["num_agents"] = len(result['info']['learner'])
-        result["episode_reward_mean"] = (
-            result['env_runners']["episode_reward_mean"])
-
 
 parser = add_rllib_example_script_args(
     default_iters=200,
@@ -62,11 +58,19 @@ parser.add_argument(
     help="The best <int> or <float> proportion of policy"
     "sets to draw new policies from.",
 )
+parser.add_argument(
+    "--patience", default=10,
+    help="How many iterations to continue training without improvement.",
+)
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     assert args.num_agents > 0, "Must set --num-agents > 0 when training!"
+    args.test_agents = args.num_agents
+
+    using_wandb = hasattr(args, "wandb_key") and args.wandb_key is not None
+
 
     # Check validity of pool size
     try:
@@ -83,7 +87,6 @@ if __name__ == "__main__":
     args.env = _path.pop(0)
     args.algo = _path.pop(0)
     args.trained_agents = _path.pop(0).split("_")[0]
-    args.test_agents = args.num_agents
 
     # Check if training instance is specified
     try:
@@ -91,9 +94,9 @@ if __name__ == "__main__":
     except (IndexError, ValueError): # no / at end of path, or no score
         args.training_score = None
 
-    # Get Agent Pool
-    trained_pols = get_eligible_policies(args)
 
+    # Get a set of policies from eligible pool
+    trained_pols = get_eligible_policies(args)
 
 
     # Environment Switch Case
@@ -107,29 +110,30 @@ if __name__ == "__main__":
         case 'pursuit':
             from Support import Pursuit
             env = Pursuit()
-
     env.register(args.num_agents)
+
+
+
+    if using_wandb:
+        import wandb
+        wandb.init(project = args.wandb_project or "Retrain_Test",
+            config={
+                'algorithm': args.algo,
+                'environment': args.env,
+                'replacement': args.replacement,
+                'pool_size': args.pool_size,
+                'trained_agents': args.trained_agents,
+                'test_agents': args.test_agents,
+                'evaluation_freq': args.evaluation_interval,
+                'checkpoint_freq': args.checkpoint_freq,
+                'max_reward': args.stop_reward,
+                'max_iterations': args.stop_iters,
+                'max_timesteps': args.stop_timesteps,
+                'patience': args.patience,
+            }
+        )
+
     policies = env.blank_policies(args.num_agents)
-
-
-    # Use the same stoppers as baseline training.
-    # Except, include a benchmark score from previous training.
-    stopper = CombinedStopper(
-        MaximumIterationStopper(max_iter=args.stop_iters),
-        FunctionStopper(lambda trial_id, result: (
-            result["num_env_steps_sampled_lifetime"] >= args.stop_timesteps)
-        ),
-        FunctionStopper(lambda trial_id, result: (
-            result["episode_reward_mean"] >= args.stop_reward)
-            # TODO: add a benchmark score
-        ),
-        TrialPlateauStopper(
-            metric="episode_reward_mean",
-            num_results=15, std=env.plateau_std
-        ),
-    )
-
-
 
     base_config = (
         get_trainable_cls(args.algo)
@@ -146,26 +150,147 @@ if __name__ == "__main__":
                 module_specs={p: RLModuleSpec() for p in policies},
             ),
         )
-        .callbacks(MetricCallbacks)
-        .env_runners(num_env_runners=args.num_env_runners)
+        .evaluation(evaluation_interval=1)
     )
+    #if args.num_env_runners:
+    #    base_config = base_config.env_runners(
+    #        num_env_runners=args.num_env_runners)
 
 
-    # Get a set of policies from eligible pool
-    new_pols = get_policy_set(trained_pols,args.num_agents,args)
+
     # Build an instance of the the algorithm from the base config
     algo = base_config.build()
 
+
+    new_pols = get_policy_set(trained_pols,args.num_agents,args)
     # and populate with the previously trained policies
     for i in range(args.test_agents):
         algo.get_policy(f"pursuer_{i}").set_weights(new_pols[i].get_weights())
+
+
+
+
+
+    # Tracking variables
+    max_score = -np.inf
+    reward_history = deque(maxlen=args.patience)
+    reward_history.append(max_score)
+
+    # Use the same stoppers as baseline training.
+    def stop_check(timestep, hist, maxscore):
+        """Check all stopping criteria."""
+        if timestep >= args.stop_timesteps:
+            return "timesteps"
+        if np.mean(hist) >= args.stop_reward:
+            return "reward"
+        if maxscore not in hist:
+            return "patience"
+        return False
+
+
+
+
+
+
+
+
+
+    for i in range(args.stop_iters):
+
+        # Evaluate at intervals
+        eva = algo.evaluate()
+        print(f"Evaluation {i}: reward_mean = {eva['env_runners']['episode_return_mean']}")
+
+
+        # Run one iteration of training
+        results = algo.train()
+
+        # Update tracking variables
+        erm = results['env_runners']['episode_return_mean']
+        reward_history.append(erm)
+        max_score = max(max_score, erm)
+        timesteps = results['env_runners']['episodes_timesteps_total']
+
+        if using_wandb:
+            wandb.log(results["env_runners"])
+
+
+
+        # Save a checkpoint at intervals
+
+
+
+        # Print iteration summary
+        print(f"Iteration {i}: reward_mean = {erm}, "
+            f"moving_average_reward = {np.mean(reward_history)}, "
+            f"total_timesteps = {timesteps}, "
+            f"total_episodes = {results['env_runners']['num_episodes']}")
+
+
+        stop_reason = stop_check(timesteps, reward_history, max_score)
+        if stop_reason:
+            break
+
+    # Out of loop criteria
+    if using_wandb:
+        wandb.log({'stop_reason': stop_reason or "Iterations"})
+        wandb.finish()
+
+
+
+    exit()
+
+"""
+python retrain.py --stop-iters=10 --path='/root/test/waterworld/PPO/2_agent/' --num-agents=4 \
+--wandb-project=delete_me_2 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f
+
+
+        # Save a checkpoint at intervals
+        if i % args.checkpoint_freq == 0:
+            checkpoint = algo.save()
+            print(f"Checkpoint saved at iteration {i}: {checkpoint}")
+
+        # Evaluate at intervals
+        if i % args.evaluation_freq == 0:
+            eval_results = algo.evaluate()
+            if using_wandb:
+                wandb.log(eval_results)
+            print(f"Evaluation results at iteration {i}: {eval_results}")
+
+
+# Initialize Weights and Biases (optional)
+
+checkpoint_freq = 10   # How often to save checkpoints
+evaluation_freq = 5    # How often to evaluate
+
+# Stopping criteria
+max_episodes = 1000    
+max_timesteps = 100000  
+reward_threshold = 200  
+moving_average_window = 10  
+min_reward_improvement = 1e-3  
+
+
+for i in range(num_iterations):
+    # Run one iteration of training
+    results = algo.train()
+    
+    # Update tracking variables
+    total_episodes += results['episodes_this_iter']
+    total_timesteps += results['timesteps_this_iter']
+    
+
+
+
+
+
+
     # Register this new algorithm so that it is acessible to tune
     register_trainable("cloned_algo", lambda _: algo)
-
 
     print("starting example script")
     run_rllib_example_script_experiment(
         base_config, args, stop=stopper, trainable="cloned_algo")
 
 
-
+"""

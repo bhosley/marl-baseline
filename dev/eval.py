@@ -101,7 +101,12 @@ if __name__ == "__main__":
     # Sample loop
     for _ in range(args.num_samples):
         if using_wandb:
-            wandb.init(project = args.wandb_project or "Eval_Test")
+            wandb.init(project = args.wandb_project or "Eval_Test",
+                config={
+                    'pool_size': args.pool_size,
+                    'trained_agents': args.trained_agents,
+                    'replacement': args.replacement,
+                })
 
         # Loop for agent range
         for test_agents in env.agent_range:
@@ -133,9 +138,6 @@ if __name__ == "__main__":
 
             out = algo.evaluate()
             out["env_runners"]['test_agents'] = test_agents
-            out["env_runners"]['trained_agents'] = args.trained_agents
-            out["env_runners"]['replacement'] = args.replacement
-            out["env_runners"]['pool_size'] = args.pool_size
 
             if using_wandb:
                 wandb.log(out["env_runners"])
@@ -148,3 +150,7 @@ if __name__ == "__main__":
 
     # End of Sample loops
     exit()
+
+"""
+python eval.py --path='/root/test/waterworld/PPO/2_agent/' --wandb-project=delete_me --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f
+"""

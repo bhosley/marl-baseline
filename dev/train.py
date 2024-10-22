@@ -106,7 +106,7 @@ if __name__ == "__main__":
         ),
     )
 
-    # Conduct the experiement
+    # Conduct the experiment
     ress = run_rllib_example_script_experiment(base_config, args, stop=stopper)
 
     # Organize results
