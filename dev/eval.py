@@ -19,19 +19,16 @@ For logging to your WandB account, use:
 
 import wandb
 
-from ray.rllib.core.rl_module.marl_module import MultiAgentRLModuleSpec
-#from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
-#from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
+from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.utils.test_utils import add_rllib_example_script_args
-from ray.tune.registry import get_trainable_cls#, register_env
+from ray.tune.registry import get_trainable_cls
 
 from Support import get_eligible_policies, get_policy_set
 
 # Establish depth of experimental directory (level of env in path)
 #   ex. /root/test/waterworld/PPO/2_agent/ -> 3
 DIR_DEPTH = 3
-
 
 parser = add_rllib_example_script_args(
     default_iters=200,
@@ -122,10 +119,8 @@ if __name__ == "__main__":
                 )
                 .rl_module(
                     model_config_dict={"vf_share_layers": True},
-                    rl_module_spec=MultiAgentRLModuleSpec(
-                        module_specs={
-                            #p: SingleAgentRLModuleSpec() for p in policies},
-                            p: RLModuleSpec() for p in policies},
+                    rl_module_spec=MultiRLModuleSpec(
+                        rl_module_specs={p: RLModuleSpec() for p in policies},
                     ),
                 )
                 .evaluation(evaluation_interval=1)
@@ -135,7 +130,7 @@ if __name__ == "__main__":
             new_pols = get_policy_set(trained_pols,test_agents,args)
             for i in range(test_agents):
                 algo.get_policy(f"pursuer_{i}").set_weights(new_pols[i].get_weights())
-
+            
             out = algo.evaluate()
             out["env_runners"]['test_agents'] = test_agents
 

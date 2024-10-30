@@ -13,6 +13,8 @@ For logging to your WandB account, use:
 `--wandb-key=[your WandB API key] --wandb-project=[some project name]
 --wandb-run-name=[optional: WandB run name (within the defined project)]`
 
+tmux new-session -d 'python train.py --checkpoint-at-end --num-samples=10 --num-env-runners=30\
+--wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=mini-test-waterworld --num-agents=4'
 """
 
 # pylint: disable=fixme
@@ -20,8 +22,7 @@ For logging to your WandB account, use:
 from argparse import ArgumentParser
 
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
-from ray.rllib.core.rl_module.marl_module import MultiAgentRLModuleSpec
-#from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
+from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.utils.test_utils import (add_rllib_example_script_args,
                                         run_rllib_example_script_experiment)
@@ -82,9 +83,8 @@ if __name__ == "__main__":
         )
         .rl_module(
             model_config_dict={"vf_share_layers": True},
-            rl_module_spec=MultiAgentRLModuleSpec(
-                #module_specs={p: SingleAgentRLModuleSpec() for p in policies},
-                module_specs={p: RLModuleSpec() for p in policies},
+            rl_module_spec=MultiRLModuleSpec( 
+                rl_module_specs={p: RLModuleSpec() for p in policies},
             ),
         )
         .callbacks(MetricCallbacks)
@@ -118,13 +118,5 @@ if __name__ == "__main__":
             dest = (f"/root/test/{args.env}/{args.algo}/" +
                     f"{args.num_agents}_agent/{score}")
             shutil.copytree(source, dest, dirs_exist_ok=True)
-            #try:
-            #except FileNotFoundError: # raised also on missing dest parent dir
-            #    # try creating parent directories
-            #    import os
-            #    os.makedirs(os.path.dirname(dest), exist_ok=True)
-            #    shutil.copytree(source, dest, dirs_exist_ok=True)
-            #    shutil.move(source, dest, copy_function = shutil.copytree)
-
 
     exit()

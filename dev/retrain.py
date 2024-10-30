@@ -23,8 +23,9 @@ import numpy as np
 import ray
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
-from ray.rllib.core.rl_module.marl_module import MultiAgentRLModuleSpec
+#from ray.rllib.core.rl_module.marl_module import MultiAgentRLModuleSpec
 #from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
+from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.utils.test_utils import (add_rllib_example_script_args,
                                         run_rllib_example_script_experiment)
@@ -145,9 +146,8 @@ if __name__ == "__main__":
         )
         .rl_module(
             model_config_dict={"vf_share_layers": True},
-            rl_module_spec=MultiAgentRLModuleSpec(
-                #module_specs={p: SingleAgentRLModuleSpec() for p in policies},
-                module_specs={p: RLModuleSpec() for p in policies},
+            rl_module_spec=MultiRLModuleSpec(
+                rl_module_specs={p: RLModuleSpec() for p in policies},
             ),
         )
         .evaluation(evaluation_interval=1)
@@ -165,8 +165,9 @@ if __name__ == "__main__":
     new_pols = get_policy_set(trained_pols,args.num_agents,args)
     # and populate with the previously trained policies
     for i in range(args.test_agents):
-        algo.get_policy(f"pursuer_{i}").set_weights(new_pols[i].get_weights())
-
+        #algo.get_policy(f"pursuer_{i}").set_weights(new_pols[i].get_weights())
+        algo.remove_policy(f"pursuer_{i}")
+        algo.add_policy(f"pursuer_{i}", policy=new_pols[i])
 
 
 
@@ -237,60 +238,9 @@ if __name__ == "__main__":
         wandb.finish()
 
 
-
     exit()
 
 """
 python retrain.py --stop-iters=10 --path='/root/test/waterworld/PPO/2_agent/' --num-agents=4 \
 --wandb-project=delete_me_2 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f
-
-
-        # Save a checkpoint at intervals
-        if i % args.checkpoint_freq == 0:
-            checkpoint = algo.save()
-            print(f"Checkpoint saved at iteration {i}: {checkpoint}")
-
-        # Evaluate at intervals
-        if i % args.evaluation_freq == 0:
-            eval_results = algo.evaluate()
-            if using_wandb:
-                wandb.log(eval_results)
-            print(f"Evaluation results at iteration {i}: {eval_results}")
-
-
-# Initialize Weights and Biases (optional)
-
-checkpoint_freq = 10   # How often to save checkpoints
-evaluation_freq = 5    # How often to evaluate
-
-# Stopping criteria
-max_episodes = 1000    
-max_timesteps = 100000  
-reward_threshold = 200  
-moving_average_window = 10  
-min_reward_improvement = 1e-3  
-
-
-for i in range(num_iterations):
-    # Run one iteration of training
-    results = algo.train()
-    
-    # Update tracking variables
-    total_episodes += results['episodes_this_iter']
-    total_timesteps += results['timesteps_this_iter']
-    
-
-
-
-
-
-
-    # Register this new algorithm so that it is acessible to tune
-    register_trainable("cloned_algo", lambda _: algo)
-
-    print("starting example script")
-    run_rllib_example_script_experiment(
-        base_config, args, stop=stopper, trainable="cloned_algo")
-
-
 """
