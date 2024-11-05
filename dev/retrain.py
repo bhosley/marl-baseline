@@ -129,8 +129,7 @@ if __name__ == "__main__":
         }
         wandb = setup_wandb(config,
             project = args.wandb_project or "Retrain_Test",
-            api_key=args.wandb_key)
-        #wandb.init(project = args.wandb_project or "Retrain_Test")
+            api_key = args.wandb_key)
 
     policies = env.blank_policies(args.num_agents)
 
@@ -159,8 +158,8 @@ if __name__ == "__main__":
     # and populate with the previously trained policies
     new_pols = get_policy_set(trained_pols,args.num_agents,args)
     for i in range(args.test_agents):
-        algo.remove_policy(f"pursuer_{i}")
-        algo.add_policy(f"pursuer_{i}", policy=new_pols[i])
+        algo.remove_policy(f'{env.agent_name}_{i}')
+        algo.add_policy(f'{env.agent_name}_{i}', policy =new_pols[i])
 
     # Tracking variables
     max_score = -np.inf
@@ -179,10 +178,6 @@ if __name__ == "__main__":
         return False
 
     for i in range(args.stop_iters):
-        # Evaluate at intervals
-        #eva = algo.evaluate()
-        #print(f"Evaluation {i}: reward_mean = {eva['env_runners']['episode_return_mean']}")
-
         # Run one iteration of training
         results = algo.train()
 
