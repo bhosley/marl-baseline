@@ -69,9 +69,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     assert args.num_agents > 0, "Must set --num-agents > 0 when training!"
     args.test_agents = args.num_agents
-
     using_wandb = hasattr(args, "wandb_key") and args.wandb_key is not None
-
 
     # Check validity of pool size
     try:
@@ -95,10 +93,8 @@ if __name__ == "__main__":
     except (IndexError, ValueError): # no / at end of path, or no score
         args.training_score = None
 
-
     # Get a set of policies from eligible pool
     trained_pols = get_eligible_policies(args)
-
 
     # Environment Switch Case
     match args.env:
@@ -113,26 +109,28 @@ if __name__ == "__main__":
             env = Pursuit()
     env.register(args.num_agents)
 
-
-
     if using_wandb:
         import wandb
-        wandb.init(project = args.wandb_project or "Retrain_Test",
-            config={
-                'algorithm': args.algo,
-                'environment': args.env,
-                'replacement': args.replacement,
-                'pool_size': args.pool_size,
-                'trained_agents': args.trained_agents,
-                'test_agents': args.test_agents,
-                'evaluation_freq': args.evaluation_interval,
-                'checkpoint_freq': args.checkpoint_freq,
-                'max_reward': args.stop_reward,
-                'max_iterations': args.stop_iters,
-                'max_timesteps': args.stop_timesteps,
-                'patience': args.patience,
-            }
-        )
+        from ray.air.integrations.wandb import setup_wandb, _is_allowed_type
+        from ray.tune.utils import flatten_dict
+        config={
+            'algorithm': args.algo,
+            'environment': args.env,
+            'replacement': args.replacement,
+            'pool_size': args.pool_size,
+            'trained_agents': args.trained_agents,
+            'test_agents': args.test_agents,
+            'evaluation_freq': args.evaluation_interval,
+            'checkpoint_freq': args.checkpoint_freq,
+            'max_reward': args.stop_reward,
+            'max_iterations': args.stop_iters,
+            'max_timesteps': args.stop_timesteps,
+            'patience': args.patience,
+        }
+        wandb = setup_wandb(config,
+            project = args.wandb_project or "Retrain_Test",
+            api_key=args.wandb_key)
+        #wandb.init(project = args.wandb_project or "Retrain_Test")
 
     policies = env.blank_policies(args.num_agents)
 
@@ -152,25 +150,17 @@ if __name__ == "__main__":
         )
         .evaluation(evaluation_interval=1)
     )
-    #if args.num_env_runners:
-    #    base_config = base_config.env_runners(
-    #        num_env_runners=args.num_env_runners)
-
-
+    if args.num_env_runners:
+        base_config = base_config.env_runners(
+            num_env_runners=args.num_env_runners)
 
     # Build an instance of the the algorithm from the base config
     algo = base_config.build()
-
-
-    new_pols = get_policy_set(trained_pols,args.num_agents,args)
     # and populate with the previously trained policies
+    new_pols = get_policy_set(trained_pols,args.num_agents,args)
     for i in range(args.test_agents):
-        #algo.get_policy(f"pursuer_{i}").set_weights(new_pols[i].get_weights())
         algo.remove_policy(f"pursuer_{i}")
         algo.add_policy(f"pursuer_{i}", policy=new_pols[i])
-
-
-
 
     # Tracking variables
     max_score = -np.inf
@@ -188,20 +178,10 @@ if __name__ == "__main__":
             return "patience"
         return False
 
-
-
-
-
-
-
-
-
     for i in range(args.stop_iters):
-
         # Evaluate at intervals
-        eva = algo.evaluate()
-        print(f"Evaluation {i}: reward_mean = {eva['env_runners']['episode_return_mean']}")
-
+        #eva = algo.evaluate()
+        #print(f"Evaluation {i}: reward_mean = {eva['env_runners']['episode_return_mean']}")
 
         # Run one iteration of training
         results = algo.train()
@@ -213,20 +193,20 @@ if __name__ == "__main__":
         timesteps = results['env_runners']['episodes_timesteps_total']
 
         if using_wandb:
-            wandb.log(results["env_runners"])
-
-
+            flat_result = flatten_dict(results, delimiter="/")
+            log = {}
+            for k, v in flat_result.items():
+                if _is_allowed_type(v) and not k.startswith("config/"):
+                    log[k] = v
+            wandb.log(log)
 
         # Save a checkpoint at intervals
-
-
 
         # Print iteration summary
         print(f"Iteration {i}: reward_mean = {erm}, "
             f"moving_average_reward = {np.mean(reward_history)}, "
             f"total_timesteps = {timesteps}, "
             f"total_episodes = {results['env_runners']['num_episodes']}")
-
 
         stop_reason = stop_check(timesteps, reward_history, max_score)
         if stop_reason:
@@ -237,10 +217,9 @@ if __name__ == "__main__":
         wandb.log({'stop_reason': stop_reason or "Iterations"})
         wandb.finish()
 
-
     exit()
 
 """
-python retrain.py --stop-iters=10 --path='/root/test/waterworld/PPO/2_agent/' --num-agents=4 \
---wandb-project=delete_me_2 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f
+tmux new-session -d \
+'python retrain.py --path='/root/test/waterworld/PPO/3_agent/' --num-agents=2 --wandb-project=delete_me_2 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f'
 """

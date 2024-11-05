@@ -98,12 +98,16 @@ if __name__ == "__main__":
     # Sample loop
     for _ in range(args.num_samples):
         if using_wandb:
-            wandb.init(project = args.wandb_project or "Eval_Test",
-                config={
+            from ray.air.integrations.wandb import setup_wandb
+            from ray.tune.utils import flatten_dict
+            config={
                     'pool_size': args.pool_size,
                     'trained_agents': args.trained_agents,
                     'replacement': args.replacement,
-                })
+                }
+            wandb = setup_wandb(config,
+                project = args.wandb_project or "Eval_Test",
+                api_key=args.wandb_key)
 
         # Loop for agent range
         for test_agents in env.agent_range:
@@ -129,13 +133,18 @@ if __name__ == "__main__":
             algo = base_config.build()
             new_pols = get_policy_set(trained_pols,test_agents,args)
             for i in range(test_agents):
-                algo.get_policy(f"pursuer_{i}").set_weights(new_pols[i].get_weights())
+                algo.remove_policy(f'{env.agent_name}_{i}')
+                algo.add_policy(f'{env.agent_name}_{i}', policy=new_pols[i])
             
             out = algo.evaluate()
             out["env_runners"]['test_agents'] = test_agents
 
             if using_wandb:
-                wandb.log(out["env_runners"])
+                flat_result = flatten_dict(out, delimiter="/")
+                log = {}
+                for k, v in flat_result.items():
+                    log[k] = v
+                wandb.log(log)
 
             algo.stop()
         # End of Test_agents loop
@@ -147,5 +156,5 @@ if __name__ == "__main__":
     exit()
 
 """
-python eval.py --path='/root/test/waterworld/PPO/2_agent/' --wandb-project=delete_me --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f
+python eval.py --path='/root/test/waterworld/PPO/3_agent/' --wandb-project=delete_me --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f
 """
