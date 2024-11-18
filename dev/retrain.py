@@ -23,8 +23,6 @@ import numpy as np
 import ray
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
-#from ray.rllib.core.rl_module.marl_module import MultiAgentRLModuleSpec
-#from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.utils.test_utils import (add_rllib_example_script_args,
@@ -70,6 +68,13 @@ if __name__ == "__main__":
     assert args.num_agents > 0, "Must set --num-agents > 0 when training!"
     args.test_agents = args.num_agents
     using_wandb = hasattr(args, "wandb_key") and args.wandb_key is not None
+
+    # Initialize Ray.
+    ray.init(
+        num_cpus=args.num_cpus or None,
+        local_mode=args.local_mode,
+        ignore_reinit_error=True,
+    )
 
     # Check validity of pool size
     try:
@@ -147,11 +152,12 @@ if __name__ == "__main__":
                 rl_module_specs={p: RLModuleSpec() for p in policies},
             ),
         )
-        .evaluation(evaluation_interval=1)
+        #.evaluation(evaluation_interval=1)
     )
-    if args.num_env_runners:
-        base_config = base_config.env_runners(
-            num_env_runners=args.num_env_runners)
+    if args.num_env_runners is not None:
+        base_config.env_runners(num_env_runners=args.num_env_runners)
+        #base_config = base_config.env_runners(
+        #    num_env_runners=args.num_env_runners)
 
     # Build an instance of the the algorithm from the base config
     algo = base_config.build()
@@ -159,7 +165,7 @@ if __name__ == "__main__":
     new_pols = get_policy_set(trained_pols,args.num_agents,args)
     for i in range(args.test_agents):
         algo.remove_policy(f'{env.agent_name}_{i}')
-        algo.add_policy(f'{env.agent_name}_{i}', policy =new_pols[i])
+        algo.add_policy(f'{env.agent_name}_{i}', policy=new_pols[i])
 
     # Tracking variables
     max_score = -np.inf
@@ -208,6 +214,8 @@ if __name__ == "__main__":
             break
 
     # Out of loop criteria
+    ray.shutdown()
+
     if using_wandb:
         wandb.log({'stop_reason': stop_reason or "Iterations"})
         wandb.finish()
@@ -216,5 +224,5 @@ if __name__ == "__main__":
 
 """
 tmux new-session -d \
-'python retrain.py --path='/root/test/waterworld/PPO/3_agent/' --num-agents=2 --wandb-project=delete_me_2 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f'
+'python retrain.py --stop-iters=10 --path='/root/test/waterworld/PPO/3_agent/' --num-agents=2 --wandb-project=delete_me_2 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f'
 """
