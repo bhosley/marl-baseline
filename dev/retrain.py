@@ -224,5 +224,5 @@ if __name__ == "__main__":
 
 """
 tmux new-session -d \
-'python retrain.py --stop-iters=10 --path='/root/test/waterworld/PPO/3_agent/' --num-agents=2 --wandb-project=delete_me_2 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f'
+'python retrain.py --path='/root/test/waterworld/PPO/3_agent/' --num-agents=2 --wandb-project=retrain-waterworld --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f'
 """
