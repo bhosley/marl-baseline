@@ -29,9 +29,9 @@ def get_eligible_policies(args):
             for p in glob(f"{i}/policies/*")]
     return pols
 
-def get_policy_set(pols,n, args):
+def get_policy_set(pols, n, replacement=False):
     """Takes pretrained policy set, and returns a new set of n-length"""
-    if args.replacement:
+    if replacement:
         return np.random.choice(pols,n)
     else:
         new_set = []
@@ -40,6 +40,13 @@ def get_policy_set(pols,n, args):
             for e in np.random.choice(pols, dif, replace=False):
                 new_set.append(e)
         return new_set
+
+def get_policies_from_checkpoint(path, n=None, replacement=False):
+    pols = [Policy.from_checkpoint(p) for p in glob(f"{path}/policies/*")]
+    if n:
+        return get_policy_set(pols, n, replacement)
+    else:
+        return pols
 
 
 class EnvironmentBase():

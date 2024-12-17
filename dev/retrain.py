@@ -162,7 +162,7 @@ if __name__ == "__main__":
     # Build an instance of the the algorithm from the base config
     algo = base_config.build()
     # and populate with the previously trained policies
-    new_pols = get_policy_set(trained_pols,args.num_agents,args)
+    new_pols = get_policy_set(trained_pols,args.num_agents,args.replacement)
     for i in range(args.test_agents):
         algo.remove_policy(f'{env.agent_name}_{i}')
         algo.add_policy(f'{env.agent_name}_{i}', policy=new_pols[i])
@@ -224,5 +224,5 @@ if __name__ == "__main__":
 
 """
 tmux new-session -d \
-'python retrain.py --path='/root/test/waterworld/PPO/3_agent/' --num-agents=2 --wandb-project=retrain-waterworld --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f'
+'python retrain.py --path='/root/test/waterworld/PPO/4_agent/' --num-agents=2 --wandb-project=retrain-waterworld --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f'
 """

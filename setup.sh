@@ -16,7 +16,7 @@ pip install swig
 pip install box2d-py
 pip install gymnasium[box2d]
 pip install pettingzoo
-pip install ray[rllib,tune,air]
+pip install ray[rllib,tune,air]==2.38.0
 
 # For SISL
 pip install pygame
