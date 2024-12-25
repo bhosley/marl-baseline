@@ -1,12 +1,7 @@
-
-# pylint: disable=fixme
-
-from collections import deque
-import numpy as np
 from argparse import ArgumentParser
 
-import ray
-from ray.air.integrations.wandb import WandbLoggerCallback
+#import ray
+#from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
@@ -16,13 +11,7 @@ from ray.tune.registry import get_trainable_cls, register_trainable
 from ray.tune.stopper import (  CombinedStopper, TrialPlateauStopper,
                                 MaximumIterationStopper, FunctionStopper)
 
-from ray.tune import CLIReporter
-
 from Support import get_policies_from_checkpoint
-
-# Establish depth of experimental directory (level of env in path)
-#   ex. /root/test/waterworld/PPO/2_agent/ -> 3
-DIR_DEPTH = 3
 
 parser = add_rllib_example_script_args(
     ArgumentParser(conflict_handler='resolve'), # Resolve for env
@@ -50,24 +39,25 @@ parser.add_argument(
     "`multiwalker`: SISL Multiwalker (Not tested yet)."
     "`pursuit`: SISL pursuit (Not tested yet).",
 )
+parser.add_argument(
+    "--steps_pretrained", type=int, default=0,
+    help="The number of iterations pretrained before this script."
+)
 
 
-class TestCallbacks(DefaultCallbacks):
+class CustomCallbacks(DefaultCallbacks):
     """Class for storing all of the custom callbacks used in this script"""
+
     def on_train_result(self, *, algorithm, result: dict, **kwargs) -> None:
         result["num_agents"] = len(result['info']['learner'])
         result["episode_reward_mean"] = (
         result['env_runners']["episode_reward_mean"])
 
-class CustomCallbacks(TestCallbacks):
     def on_algorithm_init(self, *, algorithm, metrics_logger = None, **kwargs) -> None:
         """Callback to do the rebuilding.""" 
         from Support import get_eligible_policies, get_policy_set
 
-        #
         n = len(algorithm.config.policies)
-        #trained_pols = get_eligible_policies(args)
-        #new_pols = get_policy_set(trained_pols, n)
         new_pols = get_policies_from_checkpoint(args.path, n)
 
         for i in range(n):
@@ -79,37 +69,6 @@ class CustomCallbacks(TestCallbacks):
 if __name__ == "__main__":
     args = parser.parse_args()
     assert args.num_agents > 0, "Must set --num-agents > 0 when training!"
-
-    # Check validity of pool size
-    """
-    try:
-        args.pool_size = int(args.pool_size)
-    except ValueError:
-        try:
-            args.pool_size = float(args.pool_size)
-        except ValueError:
-            print(f"{type(args.pool_size)} is an invalid pool type")
-    """
-
-    # Ingest the provided path. A valid path will always have this first part.
-    """
-    _path = args.path.split("/")
-    args.prefix = ''.join(f'{_path.pop(0)}/' for _ in range(DIR_DEPTH))
-    args.env = _path.pop(0)
-    args.algo = _path.pop(0)
-    args.trained_agents = _path.pop(0).split("_")[0]
-    """
-
-    # Check if training instance is specified
-    """
-    try:
-        args.training_score = float(_path.pop(0))
-    except (IndexError, ValueError): # no / at end of path, or no score
-        args.training_score = None
-    """
-
-    # Get a set of policies from eligible pool
-    #trained_pols = get_eligible_policies(args)
 
     # Environment Switch Case
     match args.env:
@@ -123,7 +82,6 @@ if __name__ == "__main__":
             from Support import Pursuit
             env = Pursuit()
     env.register(args.num_agents)
-
     policies = env.blank_policies(args.num_agents)
 
     base_config = (
@@ -140,12 +98,13 @@ if __name__ == "__main__":
                 rl_module_specs={p: RLModuleSpec() for p in policies},
             ),
         )
-        #.evaluation(evaluation_interval=1)
         .callbacks(CustomCallbacks)
     )
 
-    # Reimplement stopping criteria; including original max iters,
-    # max timesteps, max reward, and adding plateau
+    # Record information
+    base_config["steps_pretrained"] = args.steps_pretrained
+
+    # Reimplement stopping criteria; and add attention as plateau 
     stopper = CombinedStopper(
         MaximumIterationStopper(max_iter=args.stop_iters),
         FunctionStopper(lambda trial_id, result: (
@@ -164,13 +123,8 @@ if __name__ == "__main__":
     ress = run_rllib_example_script_experiment(base_config, args, stop=stopper)
 
 """
-python retrain3.py --path='/root/test/waterworld/PPO/4_agent/' --num-samples=2 --num-env-runners=30 --num-agents=2 --stop-iters=6
---wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=delete_me
-
-python retrain3.py --path='/root/ray_results/PPO_2024-12-16_03-09-13/PPO_2_agent_waterworld_20755_00001_1_2024-12-16_03-09-13/checkpoint_000000' --num-samples=2 --num-env-runners=30 --num-agents=3 --stop-iters=6
-
-python retrain3.py --path=/root/ray_results/PPO_2024-12-17_01-22-55/PPO_2_agent_waterworld_712e1_00000_0_2024-12-17_01-22-55/checkpoint_000004 --num-samples=2 --num-env-runners=30 --num-agents=3 --stop-iters=4
-
-path=/root/ray_results/PPO_2024-12-17_01-22-55/PPO_2_agent_waterworld_712e1_00000_0_2024-12-17_01-22-55/checkpoint_000004
---num-env-runners=30 --num-agents=$a --stop-iters=4
+python retrain.py \
+--path=/root/ray_results/PPO_2024-12-17_01-22-55/PPO_2_agent_waterworld_712e1_00000_0_2024-12-17_01-22-55/checkpoint_000004 \
+--wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=delete_me_2 \
+--num-env-runners=30 --num-agents=2 --stop-iters=4 --steps_pretrained=10
 """

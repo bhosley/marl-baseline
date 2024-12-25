@@ -119,4 +119,10 @@ if __name__ == "__main__":
                     f"{args.num_agents}_agent/{score}")
             shutil.copytree(source, dest, dirs_exist_ok=True)
 
+    for res in ress: 
+        print(res.path)
     exit()
+
+"""
+python train.py --num-samples=2 --num-env-runners=30 --num-agents=2 --stop-iters=10 --checkpoint-freq=2
+"""
