@@ -1,17 +1,15 @@
 from argparse import ArgumentParser
+from glob import glob
 
-#import ray
-#from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.utils.test_utils import (add_rllib_example_script_args,
                                         run_rllib_example_script_experiment)
-from ray.tune.registry import get_trainable_cls, register_trainable
+from ray.tune.registry import get_trainable_cls
 from ray.tune.stopper import (  CombinedStopper, TrialPlateauStopper,
                                 MaximumIterationStopper, FunctionStopper)
 
-from Support import get_policies_from_checkpoint
 
 parser = add_rllib_example_script_args(
     ArgumentParser(conflict_handler='resolve'), # Resolve for env
@@ -47,21 +45,13 @@ parser.add_argument(
 
 class CustomCallbacks(DefaultCallbacks):
     """Class for storing all of the custom callbacks used in this script"""
-
-    def on_train_result(self, *, algorithm, result: dict, **kwargs) -> None:
-        result["num_agents"] = len(result['info']['learner'])
-        result["episode_reward_mean"] = (
-        result['env_runners']["episode_reward_mean"])
-
-    def on_algorithm_init(self, *, algorithm, metrics_logger = None, **kwargs) -> None:
+    def on_algorithm_init(self, *, algorithm, **kwargs) -> None:
         """Callback to do the rebuilding.""" 
-        from Support import get_eligible_policies, get_policy_set
+        from Support import get_policies_from_checkpoint
 
         n = len(algorithm.config.policies)
         new_pols = get_policies_from_checkpoint(args.path, n)
-
         for i in range(n):
-            print("anything")
             algorithm.remove_policy(f'{env.agent_name}_{i}')
             algorithm.add_policy(f'{env.agent_name}_{i}', policy=new_pols[i])
 
@@ -103,6 +93,8 @@ if __name__ == "__main__":
 
     # Record information
     base_config["steps_pretrained"] = args.steps_pretrained
+    base_config["num_agents"] = args.num_agents
+    base_config["num_pretrained_agents"] = len(glob(f"{args.path}/policies/*"))
 
     # Reimplement stopping criteria; and add attention as plateau 
     stopper = CombinedStopper(
@@ -111,10 +103,10 @@ if __name__ == "__main__":
             result["num_env_steps_sampled_lifetime"] >= args.stop_timesteps)
         ),
         FunctionStopper(lambda trial_id, result: (
-            result["episode_reward_mean"] >= args.stop_reward)
+            result['env_runners']["episode_reward_mean"] >= args.stop_reward)    
         ),
         TrialPlateauStopper(
-            metric="episode_reward_mean",
+            metric="env_runners/episode_reward_mean",
             num_results=15, std=env.plateau_std
         ),
     )

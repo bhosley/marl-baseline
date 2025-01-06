@@ -106,6 +106,10 @@ if __name__ == "__main__":
         ),
     )
 
+    # Record information
+    base_config["num_agents"] = args.num_agents
+    base_config["steps_pretrained"] = 0
+
     # Conduct the experiment
     ress = run_rllib_example_script_experiment(base_config, args, stop=stopper)
 
