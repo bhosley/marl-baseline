@@ -50,7 +50,8 @@ class CustomCallbacks(DefaultCallbacks):
         from Support import get_policies_from_checkpoint
 
         n = len(algorithm.config.policies)
-        new_pols = get_policies_from_checkpoint(args.path, n)
+        #new_pols = get_policies_from_checkpoint(args.path, n)
+        new_pols = env.get_policies_from_checkpoint(args.path, n)
         for i in range(n):
             algorithm.remove_policy(f'{env.agent_name}_{i}')
             algorithm.add_policy(f'{env.agent_name}_{i}', policy=new_pols[i])
@@ -117,6 +118,6 @@ if __name__ == "__main__":
 """
 python retrain.py \
 --path=/root/ray_results/PPO_2024-12-17_01-22-55/PPO_2_agent_waterworld_712e1_00000_0_2024-12-17_01-22-55/checkpoint_000004 \
---wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=delete_me_2 \
 --num-env-runners=30 --num-agents=2 --stop-iters=4 --steps_pretrained=10
+--wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=delete_me_2 \
 """

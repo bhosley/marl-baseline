@@ -47,7 +47,7 @@ parser = add_rllib_example_script_args(
 )
 parser.add_argument(
     "--env", type=str, default="waterworld",
-    choices=["waterworld"],
+    choices=["waterworld","multiwalker","pursuit"],
     help="The environment to use."
     "`waterworld`: SISL WaterWorld"
     "`multiwalker`: SISL Multiwalker (Not tested yet)."
@@ -129,4 +129,10 @@ if __name__ == "__main__":
 
 """
 python train.py --num-samples=2 --num-env-runners=30 --num-agents=2 --stop-iters=10 --checkpoint-freq=2
+
+python train.py --num-samples=2 --env='multiwalker' --num-env-runners=30 --num-agents=3 --stop-iters=10 --checkpoint-freq=2
+
+tmux new-session -d "python train.py --env='multiwalker' --checkpoint-at-end --num-samples=10 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=multiwalker --num-agents=4"
+
+tmux new-session -d "python train.py --env='multiwalker' --checkpoint-at-end --num-samples=1 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=multiwalker --num-agents=4 --stop-iters=500 --stop-timesteps=100000000"
 """

@@ -41,12 +41,14 @@ def get_policy_set(pols, n, replacement=False):
                 new_set.append(e)
         return new_set
 
+####
 def get_policies_from_checkpoint(path, n=None, replacement=False):
     pols = [Policy.from_checkpoint(p) for p in glob(f"{path}/policies/*")]
     if n:
         return get_policy_set(pols, n, replacement)
     else:
         return pols
+####
 
 
 class EnvironmentBase():
@@ -59,8 +61,15 @@ class EnvironmentBase():
 
     def blank_policies(self, num_agents=None) -> set:
         """Return a set of n policy names, default to max test range"""
-        n = num_agents or self.agent_range(-1)
+        n = num_agents or self.agent_range.stop
         return {f"{self.agent_name}_{i}" for i in range(n)}
+
+    def get_policies_from_checkpoint(self, path, n=None, replacement=False):
+        pols = [Policy.from_checkpoint(p) for p in glob(f"{path}/policies/*")]
+        if n:
+            return get_policy_set(pols, n, replacement)
+        else:
+            return pols
 
     @abstractmethod
     def register(self, num_agents) -> None:
@@ -75,7 +84,6 @@ class Waterworld(EnvironmentBase):
             env_name = 'waterworld',
             agent_name = 'pursuer',
             agent_range = range(2,9),
-            plateau_std = 2,
         )
 
     def register(self, num_agents) -> None:
@@ -84,27 +92,44 @@ class Waterworld(EnvironmentBase):
                     self.waterworld_v4.parallel_env(n_pursuers=num_agents)))
 
 
-class MultiWalker(EnvironmentBase):
-    """Multiwalker-v9"""
-    def __init__(self):
-        env_name = 'multiwalker'
-        agent_name = 'walker'
-        
-        raise NotImplementedError("This environment not yet implemented")
-
-    #register_env(f"{args.num_agents}_agent_{args.env}", lambda _:
-    #   PettingZooEnv(multiwalker_v9.env()))
-    #policies = {f"walker_{i}" for i in range(args.num_agents)}
-
-
 class Pursuit(EnvironmentBase):
-    """Pursuit-v4"""
+    """Pursuit-v4 Wrapper; testing is on 2-8 agent environments"""
+    from pettingzoo.sisl import pursuit_v4
     def __init__(self):
-        env_name = 'pursuit'
-        agent_name = 'pursuer'
-        
-        raise NotImplementedError("This environment not yet implemented")
+        super().__init__(
+            env_name = 'pursuit',
+            agent_name = 'pursuer',
+            agent_range = range(2,9),
+        )
 
-    #register_env(f"{args.num_agents}_agent_{args.env}", lambda _:
-    #   PettingZooEnv(pursuit_v4.env()))
-    #policies = {f"pursuer_{i}" for i in range(args.num_agents)}
+    def register(self, num_agents) -> None:
+        register_env(f"{num_agents}_agent_{self.env_name}", lambda _:
+            ParallelPettingZooEnv(
+                self.pursuit_v4.parallel_env(
+                    n_pursuers=num_agents,
+                    obs_range=10))) # Default for pursuit is 7, but the 
+                    # smallest rllib supports (without another wrapper) is 10
+
+
+class MultiWalker(EnvironmentBase):
+    """Multiwalker-v9 Wrapper"""
+    from pettingzoo.sisl import multiwalker_v9
+    def __init__(self):
+        super().__init__(
+            env_name = 'multiwalker',
+            agent_name = 'walker',
+            agent_range = range(3,9), # Need to test decent top metric
+        )
+
+    def register(self, num_agents) -> None:
+        register_env(f"{num_agents}_agent_{self.env_name}", lambda _:
+            ParallelPettingZooEnv(
+                self.multiwalker_v9.parallel_env(n_walkers=num_agents)))
+
+    #>=python 3.12# @typing.override 
+    def get_policies_from_checkpoint(self, path, n=None, replacement=False, structured=True):
+        pols = [Policy.from_checkpoint(p) for p in glob(f"{path}/policies/*")]
+        if structured:
+            return [pols[0], *np.random.choice(pols[1:-1],n), pols[-1]]
+        else:
+            return super.get_policies_from_checkpoint(path, n, replacement)
