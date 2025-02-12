@@ -31,7 +31,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--env", type=str, default="waterworld",
-    choices=["waterworld"],
+    choices=["waterworld","multiwalker","pursuit"],
     help="The environment to use."
     "`waterworld`: SISL WaterWorld"
     "`multiwalker`: SISL Multiwalker (Not tested yet)."
@@ -91,6 +91,14 @@ if __name__ == "__main__":
         )
         .callbacks(CustomCallbacks)
     )
+
+    if args.env is 'multiwalker':
+        base_config = base_config.training(
+            model={
+                "fcnet_hiddens": [256, 256, 256, 256, 256, 256],
+                "fcnet_activation": "relu",
+            },
+        )
 
     # Record information
     base_config["steps_pretrained"] = args.steps_pretrained

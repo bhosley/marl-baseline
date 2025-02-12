@@ -1,14 +1,15 @@
 # Defining Variables
 agents=3
 samples=1
-max_iters=40
-chk_freq=40
-proj=multiwalker
+max_iters=500
+chk_freq=50
+env='multiwalker'
+proj=tune_multiwalker
 key=913528a8e92bf601b6eb055a459bcc89130c7f5f
 
-result=$(python train.py --num-samples=$samples --num-agents=$agents \
-    --num-env-runners=30 --env='multiwalker' | tail -n $samples)
-    #--checkpoint-freq=$chk_freq  --wandb-key=$key --wandb-project=$proj \
+result=$(python train.py --num-samples=$samples --num-agents=$agents --checkpoint-freq=$chk_freq \
+    --wandb-key=$key --wandb-project=$proj --stop-iters=$max_iters \
+    --num-env-runners=30 --env=$env | tail -n $samples)
     # For Testing:
     #--checkpoint-freq=2 --stop-iters=10 \
 
@@ -30,8 +31,8 @@ for path in "${results[@]}"; do
             re_iters=$((max_iters-pretr_len)) 
             python retrain.py --path=$path/${chkpts[c]} --num-samples=$samples \
             --num-env-runners=30 --num-agents=$a --steps_pretrained=$pretr_len \
-            --stop-iters=$re_iters --env='multiwalker' \
-            #--wandb-key=$key --wandb-project=$proj \
+            --stop-iters=$re_iters --env=$env \
+            --wandb-key=$key --wandb-project=$proj
             #--stop-iters=4
         done
     done

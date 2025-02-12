@@ -82,13 +82,21 @@ if __name__ == "__main__":
             policy_mapping_fn=(lambda aid, *args, **kwargs: aid),
         )
         .rl_module(
-            model_config_dict={"vf_share_layers": True},
+            #model_config_dict={"vf_share_layers": True},
             rl_module_spec=MultiRLModuleSpec( 
                 rl_module_specs={p: RLModuleSpec() for p in policies},
             ),
         )
         .callbacks(MetricCallbacks)
     )
+
+    if args.env is 'multiwalker':
+        base_config = base_config.training(
+            model={
+                "fcnet_hiddens": [256, 256, 256, 256, 256, 256],
+                "fcnet_activation": "relu",
+            },
+        )
 
     # Reimplement stopping criteria; including original max iters,
     # max timesteps, max reward, and adding plateau
@@ -135,4 +143,7 @@ python train.py --num-samples=2 --env='multiwalker' --num-env-runners=30 --num-a
 tmux new-session -d "python train.py --env='multiwalker' --checkpoint-at-end --num-samples=10 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=multiwalker --num-agents=4"
 
 tmux new-session -d "python train.py --env='multiwalker' --checkpoint-at-end --num-samples=1 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=multiwalker --num-agents=4 --stop-iters=500 --stop-timesteps=100000000"
+
+tmux new-session -d "python train.py --env='multiwalker' --num-samples=1 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=tune_multiwalker --num-agents=4 --stop-iters=500 --stop-timesteps=100000000"
+
 """
