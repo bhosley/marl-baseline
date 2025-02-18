@@ -79,57 +79,19 @@ if __name__ == "__main__":
         get_trainable_cls(args.algo)
         .get_default_config()
         .environment( f"{args.num_agents}_agent_{args.env}",
-            disable_env_checking = True    
+            #disable_env_checking = True    
         )
         .multi_agent(
             policies=policies, # Exact 1:1 mapping from AgentID to ModuleID.
             policy_mapping_fn=(lambda aid, *args, **kwargs: aid),
         )
         .rl_module(
-            model_config_dict={
-                "vf_share_layers": True,
-                #"fcnet_hiddens": [256, 256, 256, 256, 256, 256],
-                #6
-                #"fcnet_hiddens": [400, 300],
-                #"fcnet_activation": "relu",
-                #"use_attention": True,
-                #8
-                #"fcnet_hiddens": [256, 256, 256, 256, 256, 256],
-                #
-                # 1
-                #
-                #"vf_share_layers": True,
-                #"fcnet_hiddens": [400, 300],
-                #"fcnet_activation": "relu",
-                #"use_attention": True,
-                #
-                #"use_lstm": True,
-                # 
-                # 2 (trying Lower KL)
-                #"fcnet_hiddens": [256, 256, 256, 256, 256, 256],
-                #"kl_coeff": 0.1,
-                # 3 Increase entropy to increase exploration
-                #"entropy_coeff": 0.01,
-                #"fcnet_hiddens": [256, 256, 256],
-                # 4
-                # 5 Shorten/widen nets, add relu, add attention
-                #"fcnet_hiddens": [400, 300],
-                #"fcnet_activation": "relu",
-                #"use_attention": True, 
-                # 
-                #"attention_head_dim": 32
-                # 6 LSTM?
-                #"use_lstm": True,
-                # 
-                # 7 Trying SAC Again
-                "fcnet_hiddens": [400, 300],
-                },
+            model_config_dict={},
             rl_module_spec=MultiRLModuleSpec( 
                 rl_module_specs={p: RLModuleSpec() for p in policies},
             ),
         )
         .callbacks(MetricCallbacks)
-        #.training
     )
 
     # Reimplement stopping criteria; including original max iters,
@@ -170,14 +132,5 @@ if __name__ == "__main__":
     exit()
 
 """
-python train.py --num-samples=2 --num-env-runners=30 --num-agents=2 --stop-iters=10 --checkpoint-freq=2
-
-python train.py --num-samples=2 --env='multiwalker' --num-env-runners=30 --num-agents=3 --stop-iters=10 --checkpoint-freq=2
-
-tmux new-session -d "python train.py --env='multiwalker' --checkpoint-at-end --num-samples=10 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=multiwalker --num-agents=4"
-
-tmux new-session -d "python train.py --env='multiwalker' --checkpoint-at-end --num-samples=1 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=multiwalker --num-agents=4 --stop-iters=500 --stop-timesteps=100000000"
-
-tmux new-session -d "python train.py --env='multiwalker' --num-samples=1 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=tune_multiwalker --num-agents=4 --stop-iters=500 --stop-timesteps=100000000"
-
+python dqn_train.py --env='multiwalker' --num-samples=1 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=tune_multiwalker --num-agents=4 --stop-iters=500 --stop-timesteps=100000000 --algo='DQN'
 """

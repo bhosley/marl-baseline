@@ -1,24 +1,3 @@
-"""Runs env in RLlib 
-
-How to run this script
-----------------------
-`python [script file name].py --num-agents=2`
-
-For debugging, use the following additional command line options
-`--no-tune --num-env-runners=0`
-which should allow you to set breakpoints anywhere in the RLlib code and
-have the execution stop there for inspection and debugging.
-
-For logging to your WandB account, use:
-`--wandb-key=[your WandB API key] --wandb-project=[some project name]
---wandb-run-name=[optional: WandB run name (within the defined project)]`
-
-tmux new-session -d 'python train.py --checkpoint-at-end --num-samples=10 --num-env-runners=30\
---wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=mini-test-waterworld --num-agents=4'
-"""
-
-# pylint: disable=fixme
-
 from argparse import ArgumentParser
 
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
@@ -29,6 +8,77 @@ from ray.rllib.utils.test_utils import (add_rllib_example_script_args,
 from ray.tune.registry import get_trainable_cls
 from ray.tune.stopper import (  CombinedStopper, TrialPlateauStopper,
                                 MaximumIterationStopper, FunctionStopper)
+
+
+
+
+
+
+import gymnasium as gym    
+from ray.tune.registry import register_env
+from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
+
+#from gym.envs.registration import register
+
+import gymnasium as gym
+
+class ForageWrapper():
+    def __init__(self, num_agents=2, dim=8):
+        import lbforaging
+        #self.env = gym.make("Foraging-8x8-2p-1f-v3") 
+        self.env = gym.make(f"Foraging-{dim}x{dim}-{num_agents}p-1f-v3") 
+        
+        self.agents = [f"forager_{i}" for i in range(num_agents)]
+        self.num_agents = num_agents
+        self.max_num_agents = 9
+        self.possible_agents = 9
+        self.render_mode = self.env.render_mode
+        self.state = None
+        
+    def action_spaces(self):
+        return dict(zip(self.agents, self.env.action_space))
+
+    def action_space(self, agent):
+        idx = self.agents.index(agent)
+        return self.env.action_space[idx]
+
+    def observation_spaces(self):
+        return dict(zip(self.agents,self.env.observation_space))
+    
+    def observation_space(self, agent):
+        idx = self.agents.index(agent)
+        return self.env.observation_space[idx]
+
+    def reset(self, **kwargs):
+        acts, infos = self.env.reset(**kwargs)
+        return dict(zip(self.agents,acts)), infos
+
+    def step(self, actions):
+        acts = actions.values()
+        obs, rew, term, trunc, info = self.env.step(acts)
+        self.state = dict(zip(self.agents,obs))
+        rews = dict(zip(self.agents,rew))
+        terms = {a: term for a in self.agents}
+        truncs = {a: trunc for a in self.agents}
+        return self.state, rews, terms, truncs, info
+
+    # Direct Pass
+    def render(self): return self.env.render()
+    def close(self): return self.env.close()
+    def unwrapped(self): return self.env.unwrapped()
+    def metadata(self): return self.env.metadata()
+
+
+
+def func():
+    import lbforaging
+    return ParallelPettingZooEnv(
+        #gym.make( "Foraging-8x8-2p-1f-v3" )
+        #gym.make( "Foraging-5x5-2p-1f-v3" )
+        ForageWrapper()
+    )
+
+register_env("lbf_env", lambda _: func())
 
 
 class MetricCallbacks(DefaultCallbacks):
@@ -60,26 +110,19 @@ if __name__ == "__main__":
     args = parser.parse_args()
     assert args.num_agents > 0, "Must set --num-agents > 0 when training!"
 
-    # Environment Switch Case
-    match args.env:
-        case 'waterworld':
-            from Support import Waterworld
-            env = Waterworld()
-        case 'multiwalker':
-            from Support import MultiWalker
-            env = MultiWalker()
-        case 'pursuit':
-            from Support import Pursuit
-            env = Pursuit()
-
-    env.register(args.num_agents)
+    args.env = "foraging"
+    
+    from Support import Foraging   
+    env = Foraging()
     policies = env.blank_policies(args.num_agents)
+
+    # env.register(args.num_agents)
 
     base_config = (
         get_trainable_cls(args.algo)
         .get_default_config()
-        .environment( f"{args.num_agents}_agent_{args.env}",
-            disable_env_checking = True    
+        #.environment( f"{args.num_agents}_agent_{args.env}",
+        .environment( "lbf_env",
         )
         .multi_agent(
             policies=policies, # Exact 1:1 mapping from AgentID to ModuleID.
@@ -88,41 +131,6 @@ if __name__ == "__main__":
         .rl_module(
             model_config_dict={
                 "vf_share_layers": True,
-                #"fcnet_hiddens": [256, 256, 256, 256, 256, 256],
-                #6
-                #"fcnet_hiddens": [400, 300],
-                #"fcnet_activation": "relu",
-                #"use_attention": True,
-                #8
-                #"fcnet_hiddens": [256, 256, 256, 256, 256, 256],
-                #
-                # 1
-                #
-                #"vf_share_layers": True,
-                #"fcnet_hiddens": [400, 300],
-                #"fcnet_activation": "relu",
-                #"use_attention": True,
-                #
-                #"use_lstm": True,
-                # 
-                # 2 (trying Lower KL)
-                #"fcnet_hiddens": [256, 256, 256, 256, 256, 256],
-                #"kl_coeff": 0.1,
-                # 3 Increase entropy to increase exploration
-                #"entropy_coeff": 0.01,
-                #"fcnet_hiddens": [256, 256, 256],
-                # 4
-                # 5 Shorten/widen nets, add relu, add attention
-                #"fcnet_hiddens": [400, 300],
-                #"fcnet_activation": "relu",
-                #"use_attention": True, 
-                # 
-                #"attention_head_dim": 32
-                # 6 LSTM?
-                #"use_lstm": True,
-                # 
-                # 7 Trying SAC Again
-                "fcnet_hiddens": [400, 300],
                 },
             rl_module_spec=MultiRLModuleSpec( 
                 rl_module_specs={p: RLModuleSpec() for p in policies},
@@ -170,14 +178,9 @@ if __name__ == "__main__":
     exit()
 
 """
-python train.py --num-samples=2 --num-env-runners=30 --num-agents=2 --stop-iters=10 --checkpoint-freq=2
+python lbf_train.py --num-samples=2 --num-env-runners=30 --num-agents=2 --stop-iters=10 --checkpoint-freq=2
 
-python train.py --num-samples=2 --env='multiwalker' --num-env-runners=30 --num-agents=3 --stop-iters=10 --checkpoint-freq=2
+tmux new-session -d "python lbf_train.py --num-samples=10 --num-env-runners=30 --num-agents=2 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=foraging-test  --stop-iters=500 --stop-timesteps=100000000"
 
-tmux new-session -d "python train.py --env='multiwalker' --checkpoint-at-end --num-samples=10 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=multiwalker --num-agents=4"
-
-tmux new-session -d "python train.py --env='multiwalker' --checkpoint-at-end --num-samples=1 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=multiwalker --num-agents=4 --stop-iters=500 --stop-timesteps=100000000"
-
-tmux new-session -d "python train.py --env='multiwalker' --num-samples=1 --num-env-runners=30 --wandb-key=913528a8e92bf601b6eb055a459bcc89130c7f5f --wandb-project=tune_multiwalker --num-agents=4 --stop-iters=500 --stop-timesteps=100000000"
 
 """

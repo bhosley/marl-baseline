@@ -41,7 +41,10 @@ parser.add_argument(
     "--steps_pretrained", type=int, default=0,
     help="The number of iterations pretrained before this script."
 )
-
+parser.add_argument(
+    "--coop", default=2,
+    help="How many agents are required to complete the task.",
+)
 
 class CustomCallbacks(DefaultCallbacks):
     """Class for storing all of the custom callbacks used in this script"""
@@ -65,7 +68,7 @@ if __name__ == "__main__":
     match args.env:
         case 'waterworld':
             from Support import Waterworld
-            env = Waterworld()
+            env = Waterworld(n_coop=args.coop)
         case 'multiwalker':
             from Support import MultiWalker
             env = MultiWalker()

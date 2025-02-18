@@ -87,7 +87,9 @@ if __name__ == "__main__":
         )
         .rl_module(
             model_config_dict={
-                "vf_share_layers": True,
+                "fcnet_hiddens": [256, 256, 256, 256, 256, 256],
+                "fcnet_activation": "relu",
+                #"vf_share_layers": True,
                 #"fcnet_hiddens": [256, 256, 256, 256, 256, 256],
                 #6
                 #"fcnet_hiddens": [400, 300],

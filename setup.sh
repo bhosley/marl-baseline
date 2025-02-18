@@ -18,6 +18,8 @@ pip install gymnasium[box2d]
 pip install pettingzoo
 pip install ray[rllib,tune,air]==2.38.0
 
+pip install lbforaging
+
 # For SISL
 pip install pygame
 pip install pymunk

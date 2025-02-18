@@ -79,17 +79,20 @@ class EnvironmentBase():
 class Waterworld(EnvironmentBase):
     """Waterworld-v4 Wrapper; testing is on 2-8 agent environments"""
     from pettingzoo.sisl import waterworld_v4
-    def __init__(self):
+    def __init__(self, n_coop=2):
         super().__init__(
             env_name = 'waterworld',
             agent_name = 'pursuer',
             agent_range = range(2,9),
         )
+        self.n_coop = n_coop
 
-    def register(self, num_agents) -> None:
+    def register(self, num_agents, n_coop=2) -> None:
         register_env(f"{num_agents}_agent_{self.env_name}", lambda _:
                 ParallelPettingZooEnv(
-                    self.waterworld_v4.parallel_env(n_pursuers=num_agents)))
+                    self.waterworld_v4.parallel_env(
+                        n_pursuers=num_agents, n_coop=self.n_coop
+                    )))
 
 
 class Pursuit(EnvironmentBase):
@@ -133,3 +136,28 @@ class MultiWalker(EnvironmentBase):
             return [pols[0], *np.random.choice(pols[1:-1],n), pols[-1]]
         else:
             return super.get_policies_from_checkpoint(path, n, replacement)
+
+
+class Foraging(EnvironmentBase):
+    """Level Based Foraging v3"""
+    def __init__(self):
+        import lbforaging
+        super().__init__(
+            env_name = 'lbforaging',
+            agent_name = 'forager',
+            agent_range = range(2,10), # Between 2 and 9 agents
+            plateau_std = 0.02
+        )
+
+    def register(self, num_agents) -> None:
+        # import lbforaging
+        def func():
+            import lbforaging
+            return ParallelPettingZooEnv(
+                #gym.make( "Foraging-8x8-2p-1f-v3" )
+                gym.make( "Foraging-5x5-2p-1f-v3" )
+            )
+
+        register_env("lbf_env", lambda _: func())
+
+
