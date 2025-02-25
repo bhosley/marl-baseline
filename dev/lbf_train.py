@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from glob import glob
 
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
@@ -10,78 +11,7 @@ from ray.tune.stopper import (  CombinedStopper, TrialPlateauStopper,
                                 MaximumIterationStopper, FunctionStopper)
 
 
-
-
-
-
-import gymnasium as gym    
-from ray.tune.registry import register_env
-from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
-
-#from gym.envs.registration import register
-
-import gymnasium as gym
-
-class ForageWrapper():
-    def __init__(self, num_agents=2, dim=8):
-        import lbforaging
-        #self.env = gym.make("Foraging-8x8-2p-1f-v3") 
-        self.env = gym.make(f"Foraging-{dim}x{dim}-{num_agents}p-1f-v3") 
-        
-        self.agents = [f"forager_{i}" for i in range(num_agents)]
-        self.num_agents = num_agents
-        self.max_num_agents = 9
-        self.possible_agents = 9
-        self.render_mode = self.env.render_mode
-        self.state = None
-        
-    def action_spaces(self):
-        return dict(zip(self.agents, self.env.action_space))
-
-    def action_space(self, agent):
-        idx = self.agents.index(agent)
-        return self.env.action_space[idx]
-
-    def observation_spaces(self):
-        return dict(zip(self.agents,self.env.observation_space))
-    
-    def observation_space(self, agent):
-        idx = self.agents.index(agent)
-        return self.env.observation_space[idx]
-
-    def reset(self, **kwargs):
-        acts, infos = self.env.reset(**kwargs)
-        return dict(zip(self.agents,acts)), infos
-
-    def step(self, actions):
-        acts = actions.values()
-        obs, rew, term, trunc, info = self.env.step(acts)
-        self.state = dict(zip(self.agents,obs))
-        rews = dict(zip(self.agents,rew))
-        terms = {a: term for a in self.agents}
-        truncs = {a: trunc for a in self.agents}
-        return self.state, rews, terms, truncs, info
-
-    # Direct Pass
-    def render(self): return self.env.render()
-    def close(self): return self.env.close()
-    def unwrapped(self): return self.env.unwrapped()
-    def metadata(self): return self.env.metadata()
-
-
-
-def func():
-    import lbforaging
-    return ParallelPettingZooEnv(
-        #gym.make( "Foraging-8x8-2p-1f-v3" )
-        #gym.make( "Foraging-5x5-2p-1f-v3" )
-        ForageWrapper()
-    )
-
-register_env("lbf_env", lambda _: func())
-
-
-class MetricCallbacks(DefaultCallbacks):
+class InitialCallbacks(DefaultCallbacks):
     """Class for storing all of the custom metrics used in this script"""
     def on_train_result(self, *, algorithm, result: dict, **kwargs) -> None:
         try:
@@ -90,6 +20,21 @@ class MetricCallbacks(DefaultCallbacks):
                 result['env_runners']["episode_reward_mean"])
         except:
             pass
+
+class RetrainCallbacks(InitialCallbacks):
+    """Class for storing all of the custom callbacks used in this script"""
+    def on_algorithm_init(self, *, algorithm, **kwargs) -> None:
+        """Callback to do the rebuilding.""" 
+        from Support import get_policies_from_checkpoint
+
+        n = len(algorithm.config.policies)
+        #new_pols = get_policies_from_checkpoint(args.path, n)
+        new_pols = env.get_policies_from_checkpoint(args.path, n)
+        for i in range(n):
+            algorithm.remove_policy(f'{env.agent_name}_{i}')
+            algorithm.add_policy(f'{env.agent_name}_{i}', policy=new_pols[i])
+
+
 
 parser = add_rllib_example_script_args(
     ArgumentParser(conflict_handler='resolve'), # Resolve for env
@@ -105,40 +50,68 @@ parser.add_argument(
     "`multiwalker`: SISL Multiwalker (Not tested yet)."
     "`pursuit`: SISL pursuit (Not tested yet).",
 )
+parser.add_argument(
+    "--retrain", action="store_true",
+    help="flag for continuing training from checkpoint",
+) #Perhaps redundant as retraining will require a pretrained pathway.
+parser.add_argument(
+    "--path", type=str, default=None, required=False,
+    help="absolute path to checkpoint",
+)
+parser.add_argument(
+    "--steps_pretrained", type=int, default=0,
+    help="The number of iterations pretrained before this script."
+)
+parser.add_argument(
+    "-r", "--replacement", action="store_true",
+    help="Use replacement of elements in policy selection method.",
+)
+
+# Args for LBF
+parser.add_argument(
+    "--size", type=int, default=8,
+    help="The dimension of the environment.",
+)
+parser.add_argument(
+    "--coop", action='store_true',
+    help="Force cooperative mode."
+    "Requiring cooperation to consume regardless of level.",
+)
+parser.add_argument(
+    "--food", type=int, default=1,
+    help="Set the max food parameter.",
+)
+
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
     assert args.num_agents > 0, "Must set --num-agents > 0 when training!"
 
-    args.env = "foraging"
-    
     from Support import Foraging   
+    args.env = "foraging"
     env = Foraging()
+    env.register(num_agents=args.num_agents, max_food=args.food)
     policies = env.blank_policies(args.num_agents)
-
-    # env.register(args.num_agents)
 
     base_config = (
         get_trainable_cls(args.algo)
         .get_default_config()
-        #.environment( f"{args.num_agents}_agent_{args.env}",
-        .environment( "lbf_env",
-        )
+        .environment( f"{args.num_agents}_agent_{args.env}", )
         .multi_agent(
             policies=policies, # Exact 1:1 mapping from AgentID to ModuleID.
             policy_mapping_fn=(lambda aid, *args, **kwargs: aid),
         )
         .rl_module(
-            model_config_dict={
-                "vf_share_layers": True,
-                },
+            model_config_dict={"vf_share_layers": True,},
             rl_module_spec=MultiRLModuleSpec( 
                 rl_module_specs={p: RLModuleSpec() for p in policies},
             ),
         )
-        .callbacks(MetricCallbacks)
-        #.training
+        
     )
+
+    
 
     # Reimplement stopping criteria; including original max iters,
     # max timesteps, max reward, and adding plateau
@@ -155,13 +128,23 @@ if __name__ == "__main__":
             num_results=15, std=env.plateau_std
         ),
     )
+    
+    if not args.path:
+        # This is treated as initial training:
+        config = base_config.callbacks(InitialCallbacks)
+        config["steps_pretrained"] = 0
+    else:
+        # This is treated as retraining:
+        config = base_config.callbacks(RetrainCallbacks)
+        config["steps_pretrained"] = args.steps_pretrained  
+        # Is it possible to get pretrained steps from restore?
+        config["num_pretrained_agents"] = len(glob(f"{args.path}/policies/*"))
 
     # Record information
-    base_config["num_agents"] = args.num_agents
-    base_config["steps_pretrained"] = 0
+    config["num_agents"] = args.num_agents
 
     # Conduct the experiment
-    ress = run_rllib_example_script_experiment(base_config, args, stop=stopper)
+    ress = run_rllib_example_script_experiment(config, args, stop=stopper)
 
     # Organize results
     if args.checkpoint_at_end:

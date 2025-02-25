@@ -2,6 +2,8 @@ from abc import abstractmethod
 import numpy as np
 from glob import glob
 
+import gymnasium as gym
+
 from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
 from ray.rllib.policy.policy import Policy
 from ray.tune.registry import register_env
@@ -138,26 +140,73 @@ class MultiWalker(EnvironmentBase):
             return super.get_policies_from_checkpoint(path, n, replacement)
 
 
+class ForageWrapper():
+    def __init__(self, num_agents=2, dim=8, max_food=1, coop=False):
+        import lbforaging
+        #self.env = gym.make("Foraging-8x8-2p-1f-v3") 
+        c = "-coop" if coop else ""
+        self.env = gym.make(f"Foraging-{dim}x{dim}-{num_agents}p-{max_food}f{c}-v3") 
+        
+        self.agents = [f"forager_{i}" for i in range(num_agents)]
+        self.num_agents = num_agents
+        self.max_num_agents = 9
+        self.possible_agents = 9
+        self.render_mode = self.env.render_mode
+        self.state = None
+        
+    def action_spaces(self):
+        return dict(zip(self.agents, self.env.action_space))
+
+    def action_space(self, agent):
+        idx = self.agents.index(agent)
+        return self.env.action_space[idx]
+
+    def observation_spaces(self):
+        return dict(zip(self.agents,self.env.observation_space))
+    
+    def observation_space(self, agent):
+        idx = self.agents.index(agent)
+        return self.env.observation_space[idx]
+
+    def reset(self, **kwargs):
+        acts, infos = self.env.reset(**kwargs)
+        return dict(zip(self.agents,acts)), infos
+
+    def step(self, actions):
+        acts = actions.values()
+        obs, rew, term, trunc, info = self.env.step(acts)
+        self.state = dict(zip(self.agents,obs))
+        rews = dict(zip(self.agents,rew))
+        terms = {a: term for a in self.agents}
+        truncs = {a: trunc for a in self.agents}
+        return self.state, rews, terms, truncs, info
+
+    # Direct Pass
+    def render(self): return self.env.render()
+    def close(self): return self.env.close()
+    def unwrapped(self): return self.env.unwrapped()
+    def metadata(self): return self.env.metadata()
+
+
 class Foraging(EnvironmentBase):
     """Level Based Foraging v3"""
     def __init__(self):
         import lbforaging
         super().__init__(
-            env_name = 'lbforaging',
+            env_name = 'foraging',
             agent_name = 'forager',
             agent_range = range(2,10), # Between 2 and 9 agents
-            plateau_std = 0.02
+            plateau_std = 0.025
         )
 
-    def register(self, num_agents) -> None:
+    def register(self, **kwargs) -> None:
         # import lbforaging
+        num_agents = kwargs.get("num_agents", "Unknown")
         def func():
             import lbforaging
             return ParallelPettingZooEnv(
-                #gym.make( "Foraging-8x8-2p-1f-v3" )
-                gym.make( "Foraging-5x5-2p-1f-v3" )
+                ForageWrapper(**kwargs)
             )
 
-        register_env("lbf_env", lambda _: func())
-
+        register_env(f"{num_agents}_agent_{self.env_name}", lambda _: func())
 
