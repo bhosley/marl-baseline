@@ -31,6 +31,7 @@ for path in "${results[@]}"; do
             python retrain.py --path=$path/${chkpts[c]} --num-samples=$samples \
             --num-env-runners=30 --num-agents=$a --steps_pretrained=$pretr_len \
             --stop-iters=$re_iters --wandb-key=$key --wandb-project=$proj
+            #--coop=3 \
             #--stop-iters=4
         done
     done
